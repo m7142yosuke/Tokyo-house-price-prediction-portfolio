@@ -1268,8 +1268,71 @@ plt.show()
 
 
 ### ヒートマップからわかること
-- `auto_lock`と家賃の相関がかなり大きい。ただし、`auto_lock`は築年数と大きな負の相関があり、これは`auto_lock`が導入され始めたのが比較的新しいためだと考えられる。  
+- `auto_lock`と家賃の相関がやや大きい。ただし、`auto_lock`は築年数と大きな負の相関があり、これは`auto_lock`が導入され始めたのが比較的新しいためだと考えられる。  
 したがって、家賃とオートロックは疑似相関（築年数を介した）の可能性が高い
+
+## 偏相関係数の算出
+家賃とオートロックの有無は相関があるように見えるが築年数という第三の変数を介した疑似相関である可能性があることに言及した。  
+そこで偏相関係数を算出することで本当にそれらが疑似相関かどうかを定量的に見積もってみる。
+
+
+```python
+from pingouin import partial_corr
+
+partial_corr(data=df_all, x='auto_lock', y='target', covar='how_old', method='pearson')
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>n</th>
+      <th>r</th>
+      <th>CI95%</th>
+      <th>r2</th>
+      <th>adj_r2</th>
+      <th>p-val</th>
+      <th>BF10</th>
+      <th>power</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>pearson</th>
+      <td>164685</td>
+      <td>0.301203</td>
+      <td>[0.3, 0.31]</td>
+      <td>0.090723</td>
+      <td>0.090712</td>
+      <td>0.0</td>
+      <td>inf</td>
+      <td>1.0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+家賃とオートロックの相関係数は0.45だったが、第三の変数を築年数とした擬似相関は0.30となった。  
+したがって、築年数の影響を除いた後の家賃とオートロックの関係はさほど強くないことがわかる。
 
 ### 間取り
 |アルファベット  |意味  |
@@ -1335,7 +1398,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_81_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_84_0.png)
 
 
 
@@ -1387,7 +1450,19 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_88_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_91_0.png)
+
+
+港区、中央区を中心として放射線状に価格が分布していることがわかる。
+
+
+```python
+df_all.hist(bins=50, figsize=(20,30))
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_93_0.png)
 
 
 
@@ -1541,6 +1616,26 @@ print(f'RMSE {rmse}円')
     fold 2
     Training until validation scores don't improve for 500 rounds
     [500]	training's rmse: 0.0630415	valid_1's rmse: 0.100021
+    [1000]	training's rmse: 0.0496217	valid_1's rmse: 0.097066
+    [1500]	training's rmse: 0.0410849	valid_1's rmse: 0.0957656
+    [2000]	training's rmse: 0.0350514	valid_1's rmse: 0.0950447
+    [2500]	training's rmse: 0.0302328	valid_1's rmse: 0.0946612
+    [3000]	training's rmse: 0.0264548	valid_1's rmse: 0.0943714
+    [3500]	training's rmse: 0.0233639	valid_1's rmse: 0.094194
+    [4000]	training's rmse: 0.020873	valid_1's rmse: 0.0941034
+    [4500]	training's rmse: 0.0187668	valid_1's rmse: 0.09404
+    [5000]	training's rmse: 0.0170151	valid_1's rmse: 0.0939978
+    [5500]	training's rmse: 0.0156128	valid_1's rmse: 0.0939582
+    [6000]	training's rmse: 0.0144372	valid_1's rmse: 0.0939314
+    [6500]	training's rmse: 0.0134013	valid_1's rmse: 0.0938994
+    [7000]	training's rmse: 0.0124981	valid_1's rmse: 0.0938864
+    [7500]	training's rmse: 0.0117596	valid_1's rmse: 0.0938836
+    [8000]	training's rmse: 0.011113	valid_1's rmse: 0.0938852
+    Early stopping, best iteration is:
+    [7508]	training's rmse: 0.011743	valid_1's rmse: 0.0938825
+    RMSE 11263.250328399985円
+    CPU times: user 48min 35s, sys: 13.8 s, total: 48min 49s
+    Wall time: 4min 11s
 
 
 
@@ -1558,12 +1653,20 @@ plt.tight_layout()
 ```
 
 
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_100_0.png)
+
+
+
 ```python
 plt.figure(figsize=(6,6))
 plt.scatter(np.expm1(oof), np.expm1(y_train), alpha=0.3)
 plt.tight_layout()
 plt.show()
 ```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_101_0.png)
+
 
 
 ```python
@@ -1577,6 +1680,13 @@ def mean_absolute_percentage_error(y_true, y_pred):
 ```python
 mean_absolute_percentage_error(np.expm1(y_train), np.expm1(oof))
 ```
+
+
+
+
+    6.453968417481605
+
+
 
 
 ```python
@@ -1602,6 +1712,22 @@ if model_save:
 !jupyter nbconvert --to markdown 不動産価格予測.ipynb
 !mv 不動産価格予測.md README.md
 ```
+
+    [NbConvertApp] Converting notebook 不動産価格予測.ipynb to markdown
+    [NbConvertApp] Support files will be in 不動産価格予測_files/
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Writing 43878 bytes to 不動産価格予測.md
+
 
 
 ```python
