@@ -462,6 +462,7 @@ df_all.head(5)
 - `bank` - 近くにある銀行
 - `public_facility` - 近くにある公共施設
 - `how_old` - 築年数
+- `new_house` - 新築か否か
 - `daylight_direction` - 採光面
 - `floor_space` - 床面積
 - `balcony_space` - バルコニーの面積
@@ -470,12 +471,16 @@ df_all.head(5)
 - `contract_period` - 契約期間
 - `renewal_fee` - 更新料
 - `deposit2` - 保証金2
+- `parking` - 駐車場の有無
 - `home_insurance` - 住宅保険
 - `status` - 状態（空き家など）
+- `pets` - ペットがOKか否か
 - `conditions` - 条件
 - `kichen` - キッチン等の情報
 - `equipments` - 設備の情報
+- `structure` - RCなどの建物構造
 - `other` - その他の情報
+- `separate` - セパレートかどうか
 - `url` - 物件のURL
 
 ## Data cleaning
@@ -1376,8 +1381,24 @@ df_all['address_town'] = df_all['address'].apply(lambda x: re.split('\d+', x)[0]
 
 
 ```python
+def extract_city_name(row):
+    if re.findall('東京都(.+区)', row):
+        return re.findall('東京都(.+区)', row)[0]
+    elif re.findall('東京都(.+市)', row):
+        return re.findall('東京都(.+市)', row)[0]
+    elif re.findall('東京都(.+郡)', row):
+        return re.findall('東京都(.+郡)', row)[0]
+```
+
+
+```python
+df_all['city'] = df_all['address'].apply(extract_city_name)
+```
+
+
+```python
 numeric_col = [s for s in df_all.columns if df_all[s].dtype != 'object']
-object_col = ['floor_plan', 'first_near_station', 'second_near_station', 'third_near_station', 'status', 'address', 'address_town', 'name', 'url', 'structure']
+object_col = ['city', 'floor_plan', 'first_near_station', 'second_near_station', 'third_near_station', 'status', 'address', 'address_town', 'name', 'url', 'structure']
 ```
 
 
@@ -1398,7 +1419,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_84_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_86_0.png)
 
 
 
@@ -1407,22 +1428,6 @@ import geopandas as gpd
 
 # get from https://github.com/dataofjapan/land
 df_tokyomap = gpd.read_file('./data/tokyo.geojson')
-```
-
-
-```python
-def extract_city_name(row):
-    if re.findall('東京都(.+区)', row):
-        return re.findall('東京都(.+区)', row)[0]
-    elif re.findall('東京都(.+市)', row):
-        return re.findall('東京都(.+市)', row)[0]
-    elif re.findall('東京都(.+郡)', row):
-        return re.findall('東京都(.+郡)', row)[0]
-```
-
-
-```python
-df_all['city'] = df_all['address'].apply(extract_city_name)
 ```
 
 
@@ -1582,60 +1587,60 @@ print(f'RMSE {rmse}円')
 
     fold 0
     Training until validation scores don't improve for 500 rounds
-    [500]	training's rmse: 0.0631679	valid_1's rmse: 0.0994069
-    [1000]	training's rmse: 0.0493903	valid_1's rmse: 0.0966779
-    [1500]	training's rmse: 0.0408242	valid_1's rmse: 0.0956802
-    [2000]	training's rmse: 0.0347755	valid_1's rmse: 0.0951268
-    [2500]	training's rmse: 0.0299788	valid_1's rmse: 0.0947458
-    [3000]	training's rmse: 0.0262723	valid_1's rmse: 0.0945453
-    [3500]	training's rmse: 0.0232082	valid_1's rmse: 0.0943761
-    [4000]	training's rmse: 0.0208753	valid_1's rmse: 0.094286
-    [4500]	training's rmse: 0.0188477	valid_1's rmse: 0.0942086
-    [5000]	training's rmse: 0.0172252	valid_1's rmse: 0.0941509
-    [5500]	training's rmse: 0.0157543	valid_1's rmse: 0.094122
-    [6000]	training's rmse: 0.0145479	valid_1's rmse: 0.0941064
-    [6500]	training's rmse: 0.0134946	valid_1's rmse: 0.0940936
+    [500]	training's rmse: 0.0631642	valid_1's rmse: 0.0986051
+    [1000]	training's rmse: 0.0495684	valid_1's rmse: 0.0959534
+    [1500]	training's rmse: 0.0414072	valid_1's rmse: 0.0948733
+    [2000]	training's rmse: 0.0354313	valid_1's rmse: 0.0943384
+    [2500]	training's rmse: 0.0304207	valid_1's rmse: 0.093974
+    [3000]	training's rmse: 0.0267761	valid_1's rmse: 0.0937303
+    [3500]	training's rmse: 0.0237264	valid_1's rmse: 0.0935834
+    [4000]	training's rmse: 0.0212886	valid_1's rmse: 0.0934899
+    [4500]	training's rmse: 0.0192518	valid_1's rmse: 0.0934278
+    [5000]	training's rmse: 0.0174473	valid_1's rmse: 0.0933583
+    [5500]	training's rmse: 0.0159835	valid_1's rmse: 0.0933249
+    [6000]	training's rmse: 0.014847	valid_1's rmse: 0.0933065
+    [6500]	training's rmse: 0.0137962	valid_1's rmse: 0.0933026
+    [7000]	training's rmse: 0.012819	valid_1's rmse: 0.0932903
+    [7500]	training's rmse: 0.0120236	valid_1's rmse: 0.0932908
+    [8000]	training's rmse: 0.0113391	valid_1's rmse: 0.0932879
     Early stopping, best iteration is:
-    [6491]	training's rmse: 0.0135106	valid_1's rmse: 0.0940901
+    [7898]	training's rmse: 0.0114731	valid_1's rmse: 0.0932839
     fold 1
     Training until validation scores don't improve for 500 rounds
-    [500]	training's rmse: 0.0629458	valid_1's rmse: 0.0986536
-    [1000]	training's rmse: 0.0488432	valid_1's rmse: 0.0956959
-    [1500]	training's rmse: 0.0401343	valid_1's rmse: 0.0944739
-    [2000]	training's rmse: 0.0341508	valid_1's rmse: 0.0939071
-    [2500]	training's rmse: 0.0292898	valid_1's rmse: 0.0936114
-    [3000]	training's rmse: 0.0255576	valid_1's rmse: 0.0934163
-    [3500]	training's rmse: 0.0226694	valid_1's rmse: 0.0932989
-    [4000]	training's rmse: 0.0202343	valid_1's rmse: 0.0932437
-    [4500]	training's rmse: 0.0181566	valid_1's rmse: 0.0931954
-    [5000]	training's rmse: 0.0164717	valid_1's rmse: 0.0931751
-    [5500]	training's rmse: 0.0150671	valid_1's rmse: 0.0931688
-    [6000]	training's rmse: 0.0138995	valid_1's rmse: 0.09316
+    [500]	training's rmse: 0.0631286	valid_1's rmse: 0.0981498
+    [1000]	training's rmse: 0.0492893	valid_1's rmse: 0.0951999
+    [1500]	training's rmse: 0.0407562	valid_1's rmse: 0.0940201
+    [2000]	training's rmse: 0.0347757	valid_1's rmse: 0.0934227
+    [2500]	training's rmse: 0.0299916	valid_1's rmse: 0.0930726
+    [3000]	training's rmse: 0.0260634	valid_1's rmse: 0.0928807
+    [3500]	training's rmse: 0.0230268	valid_1's rmse: 0.0927485
+    [4000]	training's rmse: 0.020631	valid_1's rmse: 0.0926608
+    [4500]	training's rmse: 0.018581	valid_1's rmse: 0.0926178
+    [5000]	training's rmse: 0.016929	valid_1's rmse: 0.092613
+    [5500]	training's rmse: 0.0154978	valid_1's rmse: 0.0925927
+    [6000]	training's rmse: 0.0142536	valid_1's rmse: 0.0925906
     Early stopping, best iteration is:
-    [5692]	training's rmse: 0.01457	valid_1's rmse: 0.0931504
+    [5864]	training's rmse: 0.0145437	valid_1's rmse: 0.0925809
     fold 2
     Training until validation scores don't improve for 500 rounds
-    [500]	training's rmse: 0.0630415	valid_1's rmse: 0.100021
-    [1000]	training's rmse: 0.0496217	valid_1's rmse: 0.097066
-    [1500]	training's rmse: 0.0410849	valid_1's rmse: 0.0957656
-    [2000]	training's rmse: 0.0350514	valid_1's rmse: 0.0950447
-    [2500]	training's rmse: 0.0302328	valid_1's rmse: 0.0946612
-    [3000]	training's rmse: 0.0264548	valid_1's rmse: 0.0943714
-    [3500]	training's rmse: 0.0233639	valid_1's rmse: 0.094194
-    [4000]	training's rmse: 0.020873	valid_1's rmse: 0.0941034
-    [4500]	training's rmse: 0.0187668	valid_1's rmse: 0.09404
-    [5000]	training's rmse: 0.0170151	valid_1's rmse: 0.0939978
-    [5500]	training's rmse: 0.0156128	valid_1's rmse: 0.0939582
-    [6000]	training's rmse: 0.0144372	valid_1's rmse: 0.0939314
-    [6500]	training's rmse: 0.0134013	valid_1's rmse: 0.0938994
-    [7000]	training's rmse: 0.0124981	valid_1's rmse: 0.0938864
-    [7500]	training's rmse: 0.0117596	valid_1's rmse: 0.0938836
-    [8000]	training's rmse: 0.011113	valid_1's rmse: 0.0938852
+    [500]	training's rmse: 0.0626492	valid_1's rmse: 0.0992168
+    [1000]	training's rmse: 0.0496513	valid_1's rmse: 0.0962459
+    [1500]	training's rmse: 0.0410383	valid_1's rmse: 0.0949109
+    [2000]	training's rmse: 0.0350886	valid_1's rmse: 0.0942978
+    [2500]	training's rmse: 0.0304537	valid_1's rmse: 0.0939033
+    [3000]	training's rmse: 0.0269203	valid_1's rmse: 0.0936514
+    [3500]	training's rmse: 0.0238637	valid_1's rmse: 0.0934147
+    [4000]	training's rmse: 0.0214883	valid_1's rmse: 0.0932814
+    [4500]	training's rmse: 0.0194839	valid_1's rmse: 0.0932466
+    [5000]	training's rmse: 0.0177206	valid_1's rmse: 0.0931953
+    [5500]	training's rmse: 0.0161023	valid_1's rmse: 0.0931607
+    [6000]	training's rmse: 0.0148931	valid_1's rmse: 0.0931304
+    [6500]	training's rmse: 0.0137658	valid_1's rmse: 0.0931292
     Early stopping, best iteration is:
-    [7508]	training's rmse: 0.011743	valid_1's rmse: 0.0938825
-    RMSE 11263.250328399985円
-    CPU times: user 48min 35s, sys: 13.8 s, total: 48min 49s
-    Wall time: 4min 11s
+    [6083]	training's rmse: 0.0146468	valid_1's rmse: 0.0931201
+    RMSE 11162.000588413円
+    CPU times: user 52min 48s, sys: 29.8 s, total: 53min 18s
+    Wall time: 4min 42s
 
 
 
@@ -1684,7 +1689,7 @@ mean_absolute_percentage_error(np.expm1(y_train), np.expm1(oof))
 
 
 
-    6.453968417481605
+    6.413988179078574
 
 
 
@@ -1709,6 +1714,7 @@ if model_save:
 
 
 ```python
+!rm -r 不動産価格予測_files
 !jupyter nbconvert --to markdown 不動産価格予測.ipynb
 !mv 不動産価格予測.md README.md
 ```
@@ -1726,7 +1732,7 @@ if model_save:
     [NbConvertApp] Making directory 不動産価格予測_files
     [NbConvertApp] Making directory 不動産価格予測_files
     [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Writing 43878 bytes to 不動産価格予測.md
+    [NbConvertApp] Writing 43819 bytes to 不動産価格予測.md
 
 
 
