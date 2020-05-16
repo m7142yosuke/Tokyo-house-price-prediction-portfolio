@@ -36,7 +36,7 @@ import warnings
 warnings.simplefilter('ignore')
 sns.set()
 
-p = Path('../data')
+p = Path('./data')
 df_all = pd.concat([pd.read_csv(f, index_col=0) for f in p.glob('*.csv')], sort=True)
 ```
 
@@ -1343,7 +1343,7 @@ plt.show()
 import geopandas as gpd
 
 # get from https://github.com/dataofjapan/land
-df_tokyomap = gpd.read_file('../data/tokyo.geojson')
+df_tokyomap = gpd.read_file('./data/tokyo.geojson')
 ```
 
 
@@ -1541,23 +1541,6 @@ print(f'RMSE {rmse}円')
     fold 2
     Training until validation scores don't improve for 500 rounds
     [500]	training's rmse: 0.0630415	valid_1's rmse: 0.100021
-    [1000]	training's rmse: 0.0496217	valid_1's rmse: 0.097066
-    [1500]	training's rmse: 0.0410849	valid_1's rmse: 0.0957656
-    [2000]	training's rmse: 0.0350514	valid_1's rmse: 0.0950447
-    [2500]	training's rmse: 0.0302328	valid_1's rmse: 0.0946612
-    [3000]	training's rmse: 0.0264548	valid_1's rmse: 0.0943714
-    [3500]	training's rmse: 0.0233639	valid_1's rmse: 0.094194
-    [4000]	training's rmse: 0.020873	valid_1's rmse: 0.0941034
-    [4500]	training's rmse: 0.0187668	valid_1's rmse: 0.09404
-    [5000]	training's rmse: 0.0170151	valid_1's rmse: 0.0939978
-    [5500]	training's rmse: 0.0156128	valid_1's rmse: 0.0939582
-    [6000]	training's rmse: 0.0144372	valid_1's rmse: 0.0939314
-    [6500]	training's rmse: 0.0134013	valid_1's rmse: 0.0938994
-    [7000]	training's rmse: 0.0124981	valid_1's rmse: 0.0938864
-    [7500]	training's rmse: 0.0117596	valid_1's rmse: 0.0938836
-    [8000]	training's rmse: 0.011113	valid_1's rmse: 0.0938852
-    Early stopping, best iteration is:
-    [7508]	training's rmse: 0.011743	valid_1's rmse: 0.0938825
 
 
 
@@ -1605,24 +1588,19 @@ def calc_sc(x):
 ```python
 if model_save:
     for idx, model in enumerate(models):
-        model.booster_.save_model(f'../data/lgb_regressor_{idx}.txt')
+        model.booster_.save_model(f'./data/lgb_regressor_{idx}.txt')
     X_train = X_train.reset_index(drop=True).join(df_fold_all)
     X_train['target'] = np.expm1(y_train)
     X_train['predict'] = np.expm1(oof)
     X_train['mape'] = X_train.apply(lambda x: (x['predict']-x['target'])/x['target'], axis=1)
     X_train['sc'] = calc_sc(X_train['mape'])
-    X_train.to_csv('../data/x_train.csv', index=False)
+    X_train.to_csv('./data/x_train.csv', index=False)
 ```
 
 
 ```python
 !jupyter nbconvert --to markdown 不動産価格予測.ipynb
 !mv 不動産価格予測.md README.md
-```
-
-
-```python
-!mv README.md ../
 ```
 
 
