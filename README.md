@@ -1,6 +1,6 @@
 # Tokyo house price prediction
 
-2020/05/16  
+2020/05/17  
 Yosuke Kobayashi  
 m7142yosuke@gmail.com
 
@@ -1451,6 +1451,7 @@ df_toshin.plot(column='mean', figsize=(20,12), legend=True, legend_kwds={'label'
 for idx, row in df_toshin.iterrows():
     plt.annotate(s=row['ward_en'], xy=row['coords'],
                  horizontalalignment='center', color='white')
+plt.title('Average rent for each city', fontsize=25)
 plt.show()
 ```
 
@@ -1462,7 +1463,7 @@ plt.show()
 
 
 ```python
-df_all.hist(bins=50, figsize=(20,30))
+df_all.hist(bins=50, figsize=(20,63), layout=(25, 1))
 plt.show()
 ```
 
@@ -1639,8 +1640,8 @@ print(f'RMSE {rmse}円')
     Early stopping, best iteration is:
     [6083]	training's rmse: 0.0146468	valid_1's rmse: 0.0931201
     RMSE 11162.000588413円
-    CPU times: user 52min 48s, sys: 29.8 s, total: 53min 18s
-    Wall time: 4min 42s
+    CPU times: user 56min 33s, sys: 43.3 s, total: 57min 16s
+    Wall time: 5min 8s
 
 
 
@@ -1732,7 +1733,7 @@ if model_save:
     [NbConvertApp] Making directory 不動産価格予測_files
     [NbConvertApp] Making directory 不動産価格予測_files
     [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Writing 43819 bytes to 不動産価格予測.md
+    [NbConvertApp] Writing 43888 bytes to 不動産価格予測.md
 
 
 
