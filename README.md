@@ -113,7 +113,7 @@ pd.set_option('display.max_columns', 100)
 
 
 ```python
-df_all.head(5)
+df_all.head(2)
 ```
 
 
@@ -1254,7 +1254,7 @@ mask = np.zeros_like(df_all.corr(), dtype=np.bool)
 mask[np.triu_indices_from(mask)] = True
 
 plt.figure(figsize = (15,12))
-sns.heatmap(df_all.corr(), 
+sns.heatmap(df_all.corr().round(decimals=2), 
             annot=True,
             mask = mask,
             cmap = 'RdBu_r',
@@ -1428,20 +1428,8 @@ import geopandas as gpd
 
 # get from https://github.com/dataofjapan/land
 df_tokyomap = gpd.read_file('./data/tokyo.geojson')
-```
-
-
-```python
 df_toshin = df_tokyomap[df_tokyomap['area_en'] == 'Tokubu'].copy()
-```
-
-
-```python
 df_toshin['mean'] = [df_all.groupby('city').mean()[['target']].loc[s].target for s in df_toshin.ward_ja]
-```
-
-
-```python
 df_toshin['coords'] = df_toshin.geometry.apply(lambda x: x.representative_point().coords[:][0])
 ```
 
@@ -1456,19 +1444,20 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_91_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_88_0.png)
 
 
 港区、中央区を中心として放射線状に価格が分布していることがわかる。
 
 
 ```python
-df_all.hist(bins=50, figsize=(20,63), layout=(25, 1))
+fig = df_all.hist(bins=50, figsize=(20,90), layout=(25, 1), xlabelsize=15, ylabelsize=15)
+[x.title.set_size(25) for x in fig.ravel()]
 plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_93_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_90_0.png)
 
 
 
@@ -1659,7 +1648,7 @@ plt.tight_layout()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_100_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_97_0.png)
 
 
 
@@ -1671,7 +1660,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_101_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_98_0.png)
 
 
 
@@ -1733,7 +1722,9 @@ if model_save:
     [NbConvertApp] Making directory 不動産価格予測_files
     [NbConvertApp] Making directory 不動産価格予測_files
     [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Writing 43888 bytes to 不動産価格予測.md
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Making directory 不動産価格予測_files
+    [NbConvertApp] Writing 46076 bytes to 不動産価格予測.md
 
 
 
