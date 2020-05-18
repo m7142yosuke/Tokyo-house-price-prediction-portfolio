@@ -1,6 +1,6 @@
 # Tokyo house price prediction
 
-2020/05/17  
+2020/05/18  
 Yosuke Kobayashi  
 m7142yosuke@gmail.com
 
@@ -8,14 +8,65 @@ m7142yosuke@gmail.com
 ## このnotebookについて
 データ分析を目的として保存されていないデータは非常に汚く、予測や可視化をおこなうには前処理が必要です。  
 このnotebookでは東京の住宅価格予測を例にスクレイピングで取得した汚い生のデータを加工し、可視化・予測・精度評価するまでの手順の一例を示します。  
-## 工夫したこと
 ## 分析して得られた知見
+## 工夫したこと
+* 同じ物件情報を使うことによるデータリークを防いだ。例えば、メゾンという建物で1階と5階で物件が掲載されていたとする。この場合、1階を訓練データ、5階をテストデータとすると、テストの精度は過剰に楽観的になってしまう。そこで物件名でグルーピングして同じ物件名の情報が訓練データとテストデータに別れないようにした。
+* 欠損データの補完。例えば、「徒歩十分以内の駅数」は欠損していても「交通情報」は欠損していない場合が多い。そこで交通情報から正規表現を使って徒歩十分圏内の駅数をカウントして補完した。
+* 敷金・礼金などの情報は家賃1ヶ月分の金額であることが多いため、そのまま説明変数として使用するとデータリークにつながる。そこで金額という情報を家賃何ヶ月分かという情報に変換して使用した。
+* 目的変数の対数変換。目的変数のヒストグラムは右袖が長い分布である。損失関数によっては正規分布から大きく外れた分布だと不都合が生じるため、対数変換により正規分布に近い分布に変換した。また正規分布に近い分布に変換されたことを歪度を使って定量的に評価した。
+
 ## 予測精度について
 ## データの取得方法
 2019年末にスクレイピングによりHOME'Sから取得しました。  
-約16万5千軒の情報があります。
+約16万5千軒の情報があります。  
+※僕がスクレイピングした時点では利用事項にクローリング等を禁止するような文言は見当たりませんでした。
+
+## データ分析結果の活用方法
 
 # データの前処理とEDA
+---
+
+## Data description
+変数名とその意味
+- `name` - 物件名
+- `floor` - 階数
+- `rent` - 家賃
+- `rent_all` - 家賃（共益費）
+- `security_deposit ` - 敷金・礼金
+- `deposit` - 保証金
+- `traffic` - 最寄り駅などの情報
+- `address` - 住所
+- `number_of_stations_10_min` - 徒歩10分以内の駅数
+- `number_of_stations_all` - 近くにある全ての駅の数
+- `station_express_info` - 近くの駅の停車する電車の情報（急行・快速など）
+- `shopping` - 近くにあるショッピング施設
+- `eatting`- 近くにある飲食店
+- `education` - 近くにある教育施設
+- `hospital`- 近くにある病院
+- `bank` - 近くにある銀行
+- `public_facility` - 近くにある公共施設
+- `how_old` - 築年数
+- `new_house` - 新築か否か
+- `daylight_direction` - 採光面
+- `floor_space` - 床面積
+- `balcony_space` - バルコニーの面積
+- `floor_plan` - 間取り
+- `recomend_point` - おすすめポイント
+- `contract_period` - 契約期間
+- `renewal_fee` - 更新料
+- `deposit2` - 保証金2
+- `parking` - 駐車場の有無
+- `home_insurance` - 住宅保険
+- `status` - 状態（空き家など）
+- `pets` - ペットがOKか否か
+- `conditions` - 条件
+- `kichen` - キッチン等の情報
+- `equipments` - 設備の情報
+- `structure` - RCなどの建物構造
+- `other` - その他の情報
+- `separate` - セパレートかどうか
+- `url` - 物件のURL
+
 ---
 ## The DATA
 
@@ -38,76 +89,10 @@ sns.set()
 
 p = Path('./data')
 df_all = pd.concat([pd.read_csv(f, index_col=0) for f in p.glob('*.csv')], sort=True)
-```
 
-
-```python
+# 重複した物件を削除
 df_all.drop_duplicates(subset='url', keep='first', inplace=True)
-```
 
-
-```python
-df_all.info()
-```
-
-    <class 'pandas.core.frame.DataFrame'>
-    Int64Index: 164716 entries, 0 to 34
-    Data columns (total 47 columns):
-     #   Column                     Non-Null Count   Dtype 
-    ---  ------                     --------------   ----- 
-     0   address                    164685 non-null  object
-     1   air_conditioner            164716 non-null  int64 
-     2   auto_lock                  164716 non-null  int64 
-     3   balcony_space              164685 non-null  object
-     4   bank                       159775 non-null  object
-     5   conditions                 164684 non-null  object
-     6   contract_period            139187 non-null  object
-     7   daylight_direction         164685 non-null  object
-     8   deposit                    164685 non-null  object
-     9   deposit2                   164685 non-null  object
-     10  eatting                    159775 non-null  object
-     11  education                  159775 non-null  object
-     12  equipments                 162071 non-null  object
-     13  equipments2                142073 non-null  object
-     14  floor                      104790 non-null  object
-     15  floor2                     164684 non-null  object
-     16  floor_plan                 164685 non-null  object
-     17  floor_space                164685 non-null  object
-     18  flooring                   164716 non-null  int64 
-     19  home_insurance             164685 non-null  object
-     20  hospital                   159775 non-null  object
-     21  how_old                    164685 non-null  object
-     22  kichen                     164475 non-null  object
-     23  location                   164684 non-null  object
-     24  more_than_2                164716 non-null  int64 
-     25  name                       164685 non-null  object
-     26  new_house                  164716 non-null  int64 
-     27  number_of_stations_10_min  160115 non-null  object
-     28  number_of_stations_all     160115 non-null  object
-     29  other                      148259 non-null  object
-     30  parking                    164716 non-null  int64 
-     31  pets                       164716 non-null  int64 
-     32  public_facility            159760 non-null  object
-     33  recomend_point             155964 non-null  object
-     34  reheating                  164716 non-null  int64 
-     35  renewal_fee                139187 non-null  object
-     36  rent                       164685 non-null  object
-     37  rent_all                   164685 non-null  object
-     38  security_deposit           164685 non-null  object
-     39  separate                   164716 non-null  int64 
-     40  shopping                   159775 non-null  object
-     41  south                      164716 non-null  int64 
-     42  station_express_info       164676 non-null  object
-     43  status                     164685 non-null  object
-     44  structure                  164684 non-null  object
-     45  traffic                    164685 non-null  object
-     46  url                        164716 non-null  object
-    dtypes: int64(10), object(37)
-    memory usage: 60.3+ MB
-
-
-
-```python
 pd.set_option('display.max_columns', 100)
 ```
 
@@ -190,8 +175,8 @@ df_all.head(2)
     <tr>
       <th>0</th>
       <td>東京都中野区新井5丁目</td>
-      <td>1</td>
-      <td>1</td>
+      <td>1.0</td>
+      <td>1.0</td>
       <td>-</td>
       <td>\n（株）りそな銀行 中野支店 新井薬師出張所\n中野上高田郵便局\n西武信用金庫 薬師駅前...</td>
       <td>\n                                            ...</td>
@@ -207,30 +192,30 @@ df_all.head(2)
       <td>4階 / 4階建\n</td>
       <td>\n    ワンルーム\n     ( 洋室 5.8帖(4階)\n1R )</td>
       <td>19.28m²</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>要</td>
       <td>\nクリニックヨコヤマ\n大竹歯科医院\n新渡戸記念中野総合病院\n寺内医院\n総合東京病院\n</td>
       <td>2019年7月 ( 新築 )</td>
       <td>\n                    IHコンロ\n                 ...</td>
       <td>\n                                            ...</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>FARE中野7</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>徒歩10分以内（1駅）</td>
       <td>すべての駅（2駅）</td>
       <td>\n                                    保証会社要加入保...</td>
-      <td>0</td>
-      <td>0</td>
+      <td>0.0</td>
+      <td>0.0</td>
       <td>\n中野区役所 公園事務所哲学堂公園事務所\n中野区立 上高田図書館\n豊島区役所 区民ひろ...</td>
       <td>RC造新築デザイナーズ1Rマンション</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>87,000円</td>
       <td>8.7万円</td>
       <td>8.7万円 ( 5,000円 )</td>
       <td>8.7万円 / 無</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>\nローソンストア１００中野新井四丁目店\nｍｉｎｉピアゴ新井５丁目店\nあらいやくし薬局\...</td>
-      <td>0</td>
+      <td>0.0</td>
       <td>西武新宿線 新井薬師前駅 徒歩4分普通準急急行通勤急行ＪＲ中央線 中野駅 徒歩18分普通快速...</td>
       <td>空家</td>
       <td>\n                                            ...</td>
@@ -240,8 +225,8 @@ df_all.head(2)
     <tr>
       <th>1</th>
       <td>東京都墨田区東向島3丁目</td>
-      <td>1</td>
-      <td>1</td>
+      <td>1.0</td>
+      <td>1.0</td>
       <td>-</td>
       <td>\n東京東信用金庫 本店\n東向島一郵便局\n（株）三菱東京ＵＦＪ銀行 向島支店\n向島郵便...</td>
       <td>\n                    二人入居可\n                 ...</td>
@@ -257,185 +242,35 @@ df_all.head(2)
       <td>2階 / 12階建\n</td>
       <td>\n    1K\n     ( キッチン 2帖(2階)\n洋室 8.5帖(2階) )</td>
       <td>26.56m²</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>要</td>
       <td>\n済生会向島病院\n中林病院\n健生堂病院\n向島医院\n台東区立台東病院\n</td>
       <td>2019年11月 ( 新築 )</td>
       <td>\n                    コンロ二口\n                 ...</td>
       <td>\n                    二人入居可\n                 ...</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>RELUXIA東向島</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>徒歩10分以内（2駅）</td>
       <td>すべての駅（3駅）</td>
       <td>\n                                    　新築・インター...</td>
-      <td>1</td>
-      <td>1</td>
+      <td>1.0</td>
+      <td>1.0</td>
       <td>\n東京都 建設局 向島百花園サービスセンター\n台東区役所 台東区立図書館 石浜\n浅草２...</td>
       <td>仲介手数料半額</td>
-      <td>0</td>
+      <td>0.0</td>
       <td>新賃料の1ヶ月分</td>
       <td>8.5万円</td>
       <td>8.5万円 ( 10,000円 )</td>
       <td>無 / 1ヶ月</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>\nセブン－イレブン 墨田東向島４丁目店\nグルメシティー東向島駅前店\nあおぞら薬局\n柳...</td>
-      <td>0</td>
+      <td>0.0</td>
       <td>東武伊勢崎線 曳舟駅 徒歩6分普通区間準急準急区間急行急行京成押上線 京成曳舟駅 徒歩7分普...</td>
       <td>未完成</td>
       <td>\n                                            ...</td>
       <td>\n東武伊勢崎線 曳舟駅 徒歩6分\n京成押上線 京成曳舟駅 徒歩7分\n東武伊勢崎線 東向...</td>
       <td>https://www.homes.co.jp/chintai/b-1313570020198/</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>東京都墨田区東向島3丁目</td>
-      <td>1</td>
-      <td>1</td>
-      <td>-</td>
-      <td>\n東京東信用金庫 本店\n向島郵便局\n（株）三菱東京ＵＦＪ銀行 向島支店\n東向島一郵便...</td>
-      <td>\n                    ペット相談\n                 ...</td>
-      <td>2年間</td>
-      <td>北西</td>
-      <td>- / -</td>
-      <td>\n                                            ...</td>
-      <td>\n鳩家\nスイートサンクチュアリーイソ\nそれいゆさんさん\n押上せんべい本舗東向島店\n...</td>
-      <td>\n第三寺島幼稚園\n第一寺島小学校\n寺島中学校\n東京都立 墨田川高等学校\n千葉工業大...</td>
-      <td>\n                    オートロック\n                ...</td>
-      <td>\n                    クローゼット\n                ...</td>
-      <td>3階/-</td>
-      <td>3階 / 12階建\n</td>
-      <td>\n    1K\n     ( 洋室 8.5帖\nキッチン 2帖 )</td>
-      <td>26.56m²</td>
-      <td>1</td>
-      <td>要</td>
-      <td>\n済生会向島病院\n中西整形外科内科\n健生堂病院\nアップル歯科\n賛育会病院健康管理ク...</td>
-      <td>2019年11月 ( 新築 )</td>
-      <td>\n                    コンロ二口\n                 ...</td>
-      <td>\n                    ペット相談\n                 ...</td>
-      <td>1</td>
-      <td>RELUXIA東向島</td>
-      <td>1</td>
-      <td>徒歩10分以内（2駅）</td>
-      <td>すべての駅（2駅）</td>
-      <td>\n                                    家賃・仲介手数料...</td>
-      <td>1</td>
-      <td>1</td>
-      <td>\n東京都 建設局 向島百花園サービスセンター\n墨田区立 ひきふね図書館\n浅草２丁目町会...</td>
-      <td>新築分譲ペット相談可インターネット無料</td>
-      <td>0</td>
-      <td>新賃料の1ヶ月分</td>
-      <td>8.55万円</td>
-      <td>8.55万円 ( 10,000円 )</td>
-      <td>無 / 1ヶ月</td>
-      <td>1</td>
-      <td>\nローソン 墨田東向島二丁目店\nまいばすけっと 東武曳舟駅西店\nさつき薬局\n菊屋本店...</td>
-      <td>0</td>
-      <td>東武伊勢崎線 曳舟駅 徒歩6分普通区間準急準急区間急行急行京成押上線 京成曳舟駅 徒歩7分普...</td>
-      <td>未完成</td>
-      <td>\n                                            ...</td>
-      <td>\n東武伊勢崎線 曳舟駅 徒歩6分\n京成押上線 京成曳舟駅 徒歩7分\n\n通勤・通学駅ま...</td>
-      <td>https://www.homes.co.jp/chintai/b-1171750025121/</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>東京都杉並区上荻2丁目</td>
-      <td>1</td>
-      <td>1</td>
-      <td>-</td>
-      <td>\n三井住友信託銀行（株） 荻窪支店\n杉並四面道郵便局\n（株）三井住友銀行 荻窪支店\n...</td>
-      <td>\n                    コンロ二口\n                 ...</td>
-      <td>2年間</td>
-      <td>東</td>
-      <td>- / -</td>
-      <td>\n                                            ...</td>
-      <td>\n本むら庵・手打ちそば・荻窪本店\n亀屋菓子（株）北口本店\n魚くま\n田村米菓総本舗\n...</td>
-      <td>\nピヨピヨおうちえん\n桃井第二小学校\n神明中学校\n東京都立 荻窪高等学校\n東京女子...</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>2階/205</td>
-      <td>2階 / 3階建\n</td>
-      <td>\n    1K\n     ( キッチン 2.7帖\n洋室 7.1帖 )</td>
-      <td>26.16m²</td>
-      <td>1</td>
-      <td>要</td>
-      <td>\n東京衛生病院 附属健診センター\nカワイ歯科クリニック\n東京衛生病院 予約センター\n...</td>
-      <td>2020年1月 ( 新築 )</td>
-      <td>\n                    オートロック\n                ...</td>
-      <td>\n                    コンロ二口\n                 ...</td>
-      <td>1</td>
-      <td>Ｐｒｅｍｉａｓ荻窪</td>
-      <td>1</td>
-      <td>徒歩10分以内（1駅）</td>
-      <td>すべての駅（1駅）</td>
-      <td>\n                                    施工会社：積水ハ...</td>
-      <td>0</td>
-      <td>0</td>
-      <td>\n公園管理事務所 大田黒公園管理事務所\n杉並区立 西荻図書館\n杉並区役所 西荻南区民集...</td>
-      <td>ＪＲ中央線荻窪駅より徒歩8分（640ｍ）の好立地4線利用可能で都心部へ快適アクセスエントラン</td>
-      <td>1</td>
-      <td>新賃料の1ヶ月分</td>
-      <td>9.9万円</td>
-      <td>9.9万円 ( 7,000円 )</td>
-      <td>1ヶ月 / 1ヶ月</td>
-      <td>1</td>
-      <td>\nファミリーマート 杉並上荻二丁目店\nウッディーワン\n（有）ステラ薬局\n井上茶舗\n...</td>
-      <td>0</td>
-      <td>ＪＲ中央線 荻窪駅 徒歩8分普通快速通勤快速通勤特別快速中央特快青梅特快</td>
-      <td>未完成</td>
-      <td>\n                                            ...</td>
-      <td>\nＪＲ中央線 荻窪駅 徒歩8分\n\n通勤・通学駅までの経路・所要時間を調べる\n\n</td>
-      <td>https://www.homes.co.jp/chintai/b-37031260003000/</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>東京都杉並区上荻2丁目</td>
-      <td>1</td>
-      <td>1</td>
-      <td>-</td>
-      <td>\n三井住友信託銀行（株） 荻窪支店\n杉並四面道郵便局\n（株）三井住友銀行 荻窪支店\n...</td>
-      <td>\n                                            ...</td>
-      <td>2年間</td>
-      <td>西</td>
-      <td>- / -</td>
-      <td>\n                                            ...</td>
-      <td>\n本むら庵・手打ちそば・荻窪本店\n亀屋菓子（株）北口本店\n魚くま\n田村米菓総本舗\n...</td>
-      <td>\nピヨピヨおうちえん\n桃井第二小学校\n神明中学校\n東京都立 荻窪高等学校\n東京女子...</td>
-      <td>\n                    オートロック\n                ...</td>
-      <td>NaN</td>
-      <td>2階/201</td>
-      <td>2階 / 3階建\n</td>
-      <td>\n    1K\n     ( キッチン 1.8帖\n洋室 7.5帖 )</td>
-      <td>26.48m²</td>
-      <td>1</td>
-      <td>要</td>
-      <td>\n東京衛生病院 附属健診センター\nカワイ歯科クリニック\n東京衛生病院 予約センター\n...</td>
-      <td>2020年1月 ( 新築 )</td>
-      <td>\n                    コンロ二口\n                 ...</td>
-      <td>\n                                            ...</td>
-      <td>1</td>
-      <td>Ｐｒｅｍｉａｓ荻窪</td>
-      <td>1</td>
-      <td>徒歩10分以内（1駅）</td>
-      <td>すべての駅（1駅）</td>
-      <td>\n                                    施工会社：積水ハ...</td>
-      <td>0</td>
-      <td>0</td>
-      <td>\n公園管理事務所 大田黒公園管理事務所\n杉並区立 西荻図書館\n杉並区役所 西荻南区民集...</td>
-      <td>ＪＲ中央線荻窪駅より徒歩8分（640ｍ）の好立地4線利用可能で都心部へ快適アクセスエントラン</td>
-      <td>1</td>
-      <td>新賃料の1ヶ月分</td>
-      <td>9.9万円</td>
-      <td>9.9万円 ( 7,000円 )</td>
-      <td>1ヶ月 / 1ヶ月</td>
-      <td>1</td>
-      <td>\nファミリーマート 杉並上荻二丁目店\nウッディーワン\n（有）ステラ薬局\n井上茶舗\n...</td>
-      <td>0</td>
-      <td>ＪＲ中央線 荻窪駅 徒歩8分普通快速通勤快速通勤特別快速中央特快青梅特快</td>
-      <td>未完成</td>
-      <td>\n                                            ...</td>
-      <td>\nＪＲ中央線 荻窪駅 徒歩8分\n\n通勤・通学駅までの経路・所要時間を調べる\n\n</td>
-      <td>https://www.homes.co.jp/chintai/b-37031260003010/</td>
     </tr>
   </tbody>
 </table>
@@ -443,46 +278,68 @@ df_all.head(2)
 
 
 
-## Data description
-- `name` - 物件名
-- `floor` - 階数
-- `rent` - 家賃
-- `rent_all` - 家賃（共益費）
-- `security_deposit ` - 敷金・礼金
-- `deposit` - 保証金
-- `traffic` - 最寄り駅などの情報
-- `address` - 住所
-- `number_of_stations_10_min` - 徒歩10分以内の駅数
-- `number_of_stations_all` - 近くにある全ての駅の数
-- `station_express_info` - 近くの駅の停車する電車の情報（急行・快速など）
-- `shopping` - 近くにあるショッピング施設
-- `eatting`- 近くにある飲食店
-- `education` - 近くにある教育施設
-- `hospital`- 近くにある病院
-- `bank` - 近くにある銀行
-- `public_facility` - 近くにある公共施設
-- `how_old` - 築年数
-- `new_house` - 新築か否か
-- `daylight_direction` - 採光面
-- `floor_space` - 床面積
-- `balcony_space` - バルコニーの面積
-- `floor_plan` - 間取り
-- `recomend_point` - おすすめポイント
-- `contract_period` - 契約期間
-- `renewal_fee` - 更新料
-- `deposit2` - 保証金2
-- `parking` - 駐車場の有無
-- `home_insurance` - 住宅保険
-- `status` - 状態（空き家など）
-- `pets` - ペットがOKか否か
-- `conditions` - 条件
-- `kichen` - キッチン等の情報
-- `equipments` - 設備の情報
-- `structure` - RCなどの建物構造
-- `other` - その他の情報
-- `separate` - セパレートかどうか
-- `url` - 物件のURL
 
+```python
+df_all.info()
+```
+
+    <class 'pandas.core.frame.DataFrame'>
+    Index: 164717 entries, 0 to 東京都三鷹市上連雀
+    Data columns (total 47 columns):
+     #   Column                     Non-Null Count   Dtype  
+    ---  ------                     --------------   -----  
+     0   address                    164685 non-null  object 
+     1   air_conditioner            164716 non-null  float64
+     2   auto_lock                  164716 non-null  float64
+     3   balcony_space              164685 non-null  object 
+     4   bank                       159775 non-null  object 
+     5   conditions                 164684 non-null  object 
+     6   contract_period            139187 non-null  object 
+     7   daylight_direction         164685 non-null  object 
+     8   deposit                    164685 non-null  object 
+     9   deposit2                   164685 non-null  object 
+     10  eatting                    159775 non-null  object 
+     11  education                  159775 non-null  object 
+     12  equipments                 162071 non-null  object 
+     13  equipments2                142073 non-null  object 
+     14  floor                      104790 non-null  object 
+     15  floor2                     164684 non-null  object 
+     16  floor_plan                 164685 non-null  object 
+     17  floor_space                164685 non-null  object 
+     18  flooring                   164716 non-null  float64
+     19  home_insurance             164685 non-null  object 
+     20  hospital                   159775 non-null  object 
+     21  how_old                    164685 non-null  object 
+     22  kichen                     164475 non-null  object 
+     23  location                   164685 non-null  object 
+     24  more_than_2                164716 non-null  float64
+     25  name                       164685 non-null  object 
+     26  new_house                  164716 non-null  float64
+     27  number_of_stations_10_min  160115 non-null  object 
+     28  number_of_stations_all     160115 non-null  object 
+     29  other                      148259 non-null  object 
+     30  parking                    164716 non-null  float64
+     31  pets                       164716 non-null  float64
+     32  public_facility            159760 non-null  object 
+     33  recomend_point             155964 non-null  object 
+     34  reheating                  164716 non-null  float64
+     35  renewal_fee                139187 non-null  object 
+     36  rent                       164685 non-null  object 
+     37  rent_all                   164685 non-null  object 
+     38  security_deposit           164685 non-null  object 
+     39  separate                   164716 non-null  float64
+     40  shopping                   159775 non-null  object 
+     41  south                      164716 non-null  float64
+     42  station_express_info       164676 non-null  object 
+     43  status                     164685 non-null  object 
+     44  structure                  164684 non-null  object 
+     45  traffic                    164685 non-null  object 
+     46  url                        164716 non-null  object 
+    dtypes: float64(10), object(37)
+    memory usage: 60.3+ MB
+
+
+---
 ## Data cleaning
 EDAやモデルの学習をおこなうために、データクリーニングをします。  
 具体的には、以下の処理をしました。
@@ -521,7 +378,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_15_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_14_0.png)
 
 
 
@@ -557,7 +414,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_19_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_18_0.png)
 
 
 
@@ -600,7 +457,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_24_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_23_0.png)
 
 
 右裾が長い分布になっています。  
@@ -639,7 +496,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_29_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_28_0.png)
 
 
 見た目上、正規分布に近づいていることがわかります。定量的に確認するために、歪度をもう一度計算します。
@@ -755,8 +612,8 @@ df_all[df_all['number_of_stations_10_min'].isnull()].head(2)
     <tr>
       <th>75</th>
       <td>東京都府中市是政3丁目64-9</td>
-      <td>1</td>
-      <td>0</td>
+      <td>1.0</td>
+      <td>0.0</td>
       <td>-</td>
       <td>NaN</td>
       <td>\n                    二人入居可\n                 ...</td>
@@ -772,29 +629,29 @@ df_all[df_all['number_of_stations_10_min'].isnull()].head(2)
       <td>1階 / 2階建\n</td>
       <td>\n    1LDK\n     ( ダイニングキッチン 6.2帖\n洋室 5.1帖 )</td>
       <td>29.75m²</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>要</td>
       <td>NaN</td>
       <td>2019年9月 ( 新築 )</td>
       <td>\n                    システムキッチン\n              ...</td>
       <td>\n                    二人入居可\n                 ...</td>
-      <td>0</td>
+      <td>0.0</td>
       <td>ファインコーラル</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>NaN</td>
       <td>NaN</td>
       <td>\n                                    保証会社必須：初...</td>
-      <td>0</td>
-      <td>0</td>
+      <td>0.0</td>
+      <td>0.0</td>
       <td>NaN</td>
       <td>モニター付きインターフォン・浴室乾燥機・追い焚き・温水洗浄便座・独立洗面台</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>新賃料の1ヶ月分</td>
       <td>74000</td>
       <td>1ヶ月 / 無</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>NaN</td>
-      <td>0</td>
+      <td>0.0</td>
       <td>ＪＲ南武線 府中本町駅 徒歩11分普通快速西武多摩川線 是政駅 徒歩12分普通</td>
       <td>空家</td>
       <td>\n                                            ...</td>
@@ -806,8 +663,8 @@ df_all[df_all['number_of_stations_10_min'].isnull()].head(2)
     <tr>
       <th>3</th>
       <td>東京都文京区本駒込2丁目11</td>
-      <td>0</td>
-      <td>1</td>
+      <td>0.0</td>
+      <td>1.0</td>
       <td>-</td>
       <td>NaN</td>
       <td>\n                    二人入居可\n                 ...</td>
@@ -823,29 +680,29 @@ df_all[df_all['number_of_stations_10_min'].isnull()].head(2)
       <td>2階 / 3階建\n</td>
       <td>\n    2LDK\n     ( 洋室 4.5帖\n洋室 6.8帖\nリビングダイニング...</td>
       <td>56.3m²</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>要</td>
       <td>NaN</td>
       <td>2019年10月 ( 築1年 )</td>
       <td>\n                    コンロ三口\n                 ...</td>
       <td>\n                    二人入居可\n                 ...</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>レイ　レ　ラヴィ</td>
-      <td>0</td>
+      <td>0.0</td>
       <td>NaN</td>
       <td>NaN</td>
       <td>\n                                    お電話でのお問い...</td>
-      <td>0</td>
-      <td>1</td>
+      <td>0.0</td>
+      <td>1.0</td>
       <td>NaN</td>
       <td>新築物件 即日案内可能 角部屋２面採光 ネット無料 ペット飼育可能</td>
-      <td>1</td>
+      <td>1.0</td>
       <td>新賃料の1ヶ月分</td>
       <td>158000</td>
       <td>1ヶ月 / 1ヶ月</td>
-      <td>0</td>
+      <td>0.0</td>
       <td>NaN</td>
-      <td>0</td>
+      <td>0.0</td>
       <td>都営三田線 千石駅 徒歩3分普通急行東京メトロ南北線 本駒込駅 徒歩9分普通</td>
       <td>空家</td>
       <td>\n                                            ...</td>
@@ -919,7 +776,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_43_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_42_0.png)
 
 
 
@@ -948,7 +805,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_45_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_44_0.png)
 
 
 
@@ -1035,7 +892,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_54_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_53_0.png)
 
 
 ### 敷金・礼金
@@ -1269,7 +1126,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_71_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_70_0.png)
 
 
 ### ヒートマップからわかること
@@ -1397,6 +1254,21 @@ df_all['city'] = df_all['address'].apply(extract_city_name)
 
 
 ```python
+def extract_town_name(row):
+    row = row.replace('-', '丁目')
+    try:
+        return [s for s in re.findall('(東京都.+区\D+)\d+丁目|(東京都.+市\D+)\d+丁目|(東京都.+郡\D+)\d+丁目', row)[0] if len(s)>0][0]
+    except:
+        return ""
+```
+
+
+```python
+df_all['town'] = df_all['address'].apply(extract_town_name)
+```
+
+
+```python
 numeric_col = [s for s in df_all.columns if df_all[s].dtype != 'object']
 object_col = ['city', 'floor_plan', 'first_near_station', 'second_near_station', 'third_near_station', 'status', 'address', 'address_town', 'name', 'url', 'structure']
 ```
@@ -1419,7 +1291,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_86_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_87_0.png)
 
 
 
@@ -1444,7 +1316,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_88_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_89_0.png)
 
 
 港区、中央区を中心として放射線状に価格が分布していることがわかる。
@@ -1457,7 +1329,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_90_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_91_0.png)
 
 
 
@@ -1629,8 +1501,8 @@ print(f'RMSE {rmse}円')
     Early stopping, best iteration is:
     [6083]	training's rmse: 0.0146468	valid_1's rmse: 0.0931201
     RMSE 11162.000588413円
-    CPU times: user 56min 33s, sys: 43.3 s, total: 57min 16s
-    Wall time: 5min 8s
+    CPU times: user 53min 6s, sys: 31.6 s, total: 53min 38s
+    Wall time: 4min 47s
 
 
 
@@ -1648,7 +1520,7 @@ plt.tight_layout()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_97_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_98_0.png)
 
 
 
@@ -1660,7 +1532,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_98_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_99_0.png)
 
 
 
@@ -1722,10 +1594,99 @@ if model_save:
     [NbConvertApp] Making directory 不動産価格予測_files
     [NbConvertApp] Making directory 不動産価格予測_files
     [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Writing 46076 bytes to 不動産価格予測.md
+    [NbConvertApp] Writing 41596 bytes to 不動産価格予測.md
 
+
+
+```python
+# from geopy.geocoders import Nominatim
+# from geopy.extra.rate_limiter import RateLimiter
+
+# geolocator = Nominatim()
+# geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+```
+
+
+```python
+# location_dict = {}
+# for i,s in enumerate(df_all.town.unique()):
+#     print(i)
+#     if s:
+#         loc = geocode(s)
+#         if loc:
+#             location_dict[s] = loc[1]
+```
+
+
+```python
+# pd.DataFrame.from_dict({'location': location_dict}).to_csv('data/location.csv')
+```
+
+
+```python
+import ast
+
+df_loc = pd.read_csv('data/location.csv', index_col=0, converters={"location": ast.literal_eval})
+```
+
+
+```python
+# import geopandas
+
+# gdf = geopandas.GeoDataFrame(
+#     index=df_loc.index, geometry=geopandas.points_from_xy([s[0] for s in df_loc.location], [s[1] for s in df_loc.location]))
+```
+
+
+```python
+df_loc['latitude'] = [s[0] for s in df_loc.location]
+df_loc['longitude'] = [s[1] for s in df_loc.location]
+```
+
+
+```python
+df_loc_target = pd.merge(df_all[df_all.town.isin(gdf.index)].groupby('town').mean()[['time_to_go_nearest_station']], df_loc ,left_index=True, right_index=True)
+```
+
+
+    ---------------------------------------------------------------------------
+
+    NameError                                 Traceback (most recent call last)
+
+    <ipython-input-76-85cd9aadf7a7> in <module>
+    ----> 1 df_loc_target = pd.merge(df_all[df_all.town.isin(gdf.index)].groupby('town').mean()[['time_to_go_nearest_station']], df_loc ,left_index=True, right_index=True)
+    
+
+    NameError: name 'gdf' is not defined
+
+
+
+```python
+df_toshin.plot(column='mean', figsize=(20,12), legend=True, legend_kwds={'label': "Mean rent"}, cmap='viridis')
+for idx, row in df_toshin.iterrows():
+    plt.annotate(s=row['ward_en'], xy=row['coords'],
+                 horizontalalignment='center', color='white')
+plt.scatter(df_loc_target[(df_loc_target.latitude >=35) & (df_loc_target.longitude >= 139.6)].longitude,
+            df_loc_target[(df_loc_target.latitude >=35) & (df_loc_target.longitude >= 139.6)].latitude,
+            s=df_loc_target.time_to_go_nearest_station*20, alpha=0.6, c='red')
+plt.title('Average rent for each city', fontsize=25)
+plt.show()
+```
+
+
+```python
+df_temp = df_all.groupby('town').target.agg(['mean', 'count'])
+```
+
+
+```python
+df_temp[df_temp['count'] >= 10].sort_values(by='mean', ascending=False).head(30)
+```
+
+
+```python
+df_temp[df_temp['count'] >= 10].sort_values(by='mean').head(30)
+```
 
 
 ```python
