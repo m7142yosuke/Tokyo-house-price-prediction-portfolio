@@ -1,6 +1,6 @@
 # Tokyo house price prediction
 
-2020/05/18  
+最終更新日：2020/05/21  
 Yosuke Kobayashi  
 m7142yosuke@gmail.com
 
@@ -8,20 +8,23 @@ m7142yosuke@gmail.com
 ## このnotebookについて
 データ分析を目的として保存されていないデータは非常に汚く、予測や可視化をおこなうには前処理が必要です。  
 このnotebookでは東京の住宅価格予測を例にスクレイピングで取得した汚い生のデータを加工し、可視化・予測・精度評価するまでの手順の一例を示します。  
-## 分析して得られた知見
+
+## データから分かった意外なこと
+* 最寄り駅まで徒歩10分の物件数は徒歩11分の物件数に比べて不自然に多く、できるだけ10分以内に収まるように情報が操作されている可能性がある。幾何学的に考えれば、駅からの距離に比例して駅から同じ時間で行ける物件数は多くなる（物件数が全て同じ密度と仮定）
+
 ## 工夫したこと
-* 同じ物件情報を使うことによるデータリークを防いだ。例えば、メゾンという建物で1階と5階で物件が掲載されていたとする。この場合、1階を訓練データ、5階をテストデータとすると、テストの精度は過剰に楽観的になってしまう。そこで物件名でグルーピングして同じ物件名の情報が訓練データとテストデータに別れないようにした。
+* 同じ物件情報を使うことによるデータリークを防いだ。例えば、メゾンという建物で1階と5階で物件が掲載されていたとする。この場合、1階を訓練データ、5階をテストデータとすると、お互いに似たや賃貸であるためテストの精度は過剰に楽観的になってしまう。そこで物件名でグルーピングして同じ物件名の情報が訓練データとテストデータに別れないようにした。
 * 欠損データの補完。例えば、「徒歩十分以内の駅数」は欠損していても「交通情報」は欠損していない場合が多い。そこで交通情報から正規表現を使って徒歩十分圏内の駅数をカウントして補完した。
 * 敷金・礼金などの情報は家賃1ヶ月分の金額であることが多いため、そのまま説明変数として使用するとデータリークにつながる。そこで金額という情報を家賃何ヶ月分かという情報に変換して使用した。
 * 目的変数の対数変換。目的変数のヒストグラムは右袖が長い分布である。損失関数によっては正規分布から大きく外れた分布だと不都合が生じるため、対数変換により正規分布に近い分布に変換した。また正規分布に近い分布に変換されたことを歪度を使って定量的に評価した。
 
 ## 予測精度について
+テストデータに対して相対誤差が約5.9％となり、それなりに良い精度となった。
+
 ## データの取得方法
 2019年末にスクレイピングによりHOME'Sから取得しました。  
 約16万5千軒の情報があります。  
 ※僕がスクレイピングした時点では利用事項にクローリング等を禁止するような文言は見当たりませんでした。
-
-## データ分析結果の活用方法
 
 # データの前処理とEDA
 ---
@@ -32,7 +35,8 @@ m7142yosuke@gmail.com
 - `floor` - 階数
 - `rent` - 家賃
 - `rent_all` - 家賃（共益費）
-- `security_deposit ` - 敷金・礼金
+- `security_deposit ` - 敷金
+- `key_money` - 礼金
 - `deposit` - 保証金
 - `traffic` - 最寄り駅などの情報
 - `address` - 住所
@@ -81,6 +85,7 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import japanize_matplotlib
 import pickle
 import glob
 import warnings
@@ -105,19 +110,6 @@ df_all.head(2)
 
 
 <div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -372,7 +364,7 @@ df_all['rent'] = df_all['rent'].apply(lambda x: float(x.rstrip('万円'))*10000)
 
 ```python
 plt.figure(figsize=(12, 8))
-plt.hist(df_all['rent'], bins=400)
+sns.distplot(df_all['rent'], bins=400)
 plt.xlim(0, 500000)
 plt.show()
 ```
@@ -401,7 +393,7 @@ df_all['rent'].describe()
 
 
 
-平均が91652円で、中央値が85000円。さすが東京、高いですね。。
+平均が91652円で、中央値が85000円。やはり東京の家賃は高いですね。
 
 ### `service_fee`（共益費）の分布
 
@@ -440,7 +432,7 @@ df_all['service_fee'].describe()
 共益費はあんまり綺麗な分布ではないですね。
 
 ### 目的変数の設定
-このデータ分析では`rent`（家賃）と`service_fee`（共益費）を合計した金額を目的変数とします。  
+このデータ分析では`rent`（家賃）に`service_fee`（共益費）を足した金額を目的変数とします。  
 
 
 ```python
@@ -451,7 +443,7 @@ df_all['target'] = df_all['rent'] + df_all['service_fee']
 
 ```python
 plt.figure(figsize=(12, 8))
-plt.hist(df_all['target'], bins=400)
+sns.distplot(df_all['target'], bins=400)
 plt.xlim(0, 500000)
 plt.show()
 ```
@@ -491,7 +483,7 @@ scipy.stats.skew(df_all['target'])
 import numpy as np
 
 plt.figure(figsize=(12, 8))
-plt.hist(np.log1p(df_all['target']), bins=100)
+sns.distplot(np.log1p(df_all['target']), bins=100)
 plt.show()
 ```
 
@@ -534,182 +526,31 @@ df_all['number_of_stations_10_min'].unique()
 
 
 ```python
-df_all[df_all['number_of_stations_10_min'].isnull()].head(2)
+df_all[df_all['number_of_stations_10_min'].isnull()][['number_of_stations_10_min', 'traffic']].head(2)
 ```
 
 
 
 
 <div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>address</th>
-      <th>air_conditioner</th>
-      <th>auto_lock</th>
-      <th>balcony_space</th>
-      <th>bank</th>
-      <th>conditions</th>
-      <th>contract_period</th>
-      <th>daylight_direction</th>
-      <th>deposit</th>
-      <th>deposit2</th>
-      <th>eatting</th>
-      <th>education</th>
-      <th>equipments</th>
-      <th>equipments2</th>
-      <th>floor</th>
-      <th>floor2</th>
-      <th>floor_plan</th>
-      <th>floor_space</th>
-      <th>flooring</th>
-      <th>home_insurance</th>
-      <th>hospital</th>
-      <th>how_old</th>
-      <th>kichen</th>
-      <th>location</th>
-      <th>more_than_2</th>
-      <th>name</th>
-      <th>new_house</th>
       <th>number_of_stations_10_min</th>
-      <th>number_of_stations_all</th>
-      <th>other</th>
-      <th>parking</th>
-      <th>pets</th>
-      <th>public_facility</th>
-      <th>recomend_point</th>
-      <th>reheating</th>
-      <th>renewal_fee</th>
-      <th>rent</th>
-      <th>security_deposit</th>
-      <th>separate</th>
-      <th>shopping</th>
-      <th>south</th>
-      <th>station_express_info</th>
-      <th>status</th>
-      <th>structure</th>
       <th>traffic</th>
-      <th>url</th>
-      <th>service_fee</th>
-      <th>target</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <th>75</th>
-      <td>東京都府中市是政3丁目64-9</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>-</td>
       <td>NaN</td>
-      <td>\n                    二人入居可\n                 ...</td>
-      <td>2年間</td>
-      <td>南東</td>
-      <td>- / -</td>
-      <td>\n                                            ...</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>\n                    TVモニタ付インターホン\n          ...</td>
-      <td>\n                                            ...</td>
-      <td>1階/102</td>
-      <td>1階 / 2階建\n</td>
-      <td>\n    1LDK\n     ( ダイニングキッチン 6.2帖\n洋室 5.1帖 )</td>
-      <td>29.75m²</td>
-      <td>1.0</td>
-      <td>要</td>
-      <td>NaN</td>
-      <td>2019年9月 ( 新築 )</td>
-      <td>\n                    システムキッチン\n              ...</td>
-      <td>\n                    二人入居可\n                 ...</td>
-      <td>0.0</td>
-      <td>ファインコーラル</td>
-      <td>1.0</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>\n                                    保証会社必須：初...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>NaN</td>
-      <td>モニター付きインターフォン・浴室乾燥機・追い焚き・温水洗浄便座・独立洗面台</td>
-      <td>1.0</td>
-      <td>新賃料の1ヶ月分</td>
-      <td>74000</td>
-      <td>1ヶ月 / 無</td>
-      <td>1.0</td>
-      <td>NaN</td>
-      <td>0.0</td>
-      <td>ＪＲ南武線 府中本町駅 徒歩11分普通快速西武多摩川線 是政駅 徒歩12分普通</td>
-      <td>空家</td>
-      <td>\n                                            ...</td>
       <td>\nＪＲ南武線 府中本町駅 徒歩11分\n西武多摩川線 是政駅 徒歩12分\n\n通勤・通学...</td>
-      <td>https://www.homes.co.jp/chintai/b-1142840600220/</td>
-      <td>3000</td>
-      <td>77000</td>
     </tr>
     <tr>
       <th>3</th>
-      <td>東京都文京区本駒込2丁目11</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>-</td>
       <td>NaN</td>
-      <td>\n                    二人入居可\n                 ...</td>
-      <td>2年間</td>
-      <td>南東</td>
-      <td>- / -</td>
-      <td>\n                                            ...</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>\n                    オートロック\n                ...</td>
-      <td>\n                    全居室収納\n                 ...</td>
-      <td>2階/206</td>
-      <td>2階 / 3階建\n</td>
-      <td>\n    2LDK\n     ( 洋室 4.5帖\n洋室 6.8帖\nリビングダイニング...</td>
-      <td>56.3m²</td>
-      <td>1.0</td>
-      <td>要</td>
-      <td>NaN</td>
-      <td>2019年10月 ( 築1年 )</td>
-      <td>\n                    コンロ三口\n                 ...</td>
-      <td>\n                    二人入居可\n                 ...</td>
-      <td>1.0</td>
-      <td>レイ　レ　ラヴィ</td>
-      <td>0.0</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>\n                                    お電話でのお問い...</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>NaN</td>
-      <td>新築物件 即日案内可能 角部屋２面採光 ネット無料 ペット飼育可能</td>
-      <td>1.0</td>
-      <td>新賃料の1ヶ月分</td>
-      <td>158000</td>
-      <td>1ヶ月 / 1ヶ月</td>
-      <td>0.0</td>
-      <td>NaN</td>
-      <td>0.0</td>
-      <td>都営三田線 千石駅 徒歩3分普通急行東京メトロ南北線 本駒込駅 徒歩9分普通</td>
-      <td>空家</td>
-      <td>\n                                            ...</td>
       <td>\n都営三田線 千石駅 徒歩3分\n東京メトロ南北線 本駒込駅 徒歩9分\n都営三田線白山駅...</td>
-      <td>https://www.homes.co.jp/chintai/b-1408470000244/</td>
-      <td>4000</td>
-      <td>162000</td>
     </tr>
   </tbody>
 </table>
@@ -717,7 +558,8 @@ df_all[df_all['number_of_stations_10_min'].isnull()].head(2)
 
 
 
-駅数が欠損していても、`traffic`から徒歩10分圏内の駅数は0じゃないことがわかります。
+駅数が欠損していても、`traffic`から徒歩10分圏内の駅数は0じゃないことがわかります。  
+よって、`traffic`から徒歩10分以内の駅を抽出し、`number_of_stations_10_min`を補完することができます。
 
 ### `number_of_stations_10_min`と`number_of_stations_all`の欠損値の補完
 欠損していない`traffic`から文字を抽出して、欠損している駅数を補完します。
@@ -768,6 +610,8 @@ df_all['number_of_stations_10_min'] = df_all['traffic'].apply(count_10min_statio
 df_all['number_of_stations_all'] = df_all['traffic'].apply(count_near_stations).astype('int')
 ```
 
+### 徒歩10分以内にある駅数のヒストグラム
+
 
 ```python
 plt.figure(figsize=(12, 8))
@@ -776,26 +620,10 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_42_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_43_0.png)
 
 
-
-```python
-df_all['number_of_stations_10_min'].value_counts()
-```
-
-
-
-
-    1    67601
-    0    46957
-    2    37202
-    3    12612
-    4      311
-    5        2
-    Name: number_of_stations_10_min, dtype: int64
-
-
+### 家の近くにある駅数のヒストグラム
 
 
 ```python
@@ -805,31 +633,10 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_44_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_45_0.png)
 
 
-
-```python
-df_all['number_of_stations_all'].value_counts()
-```
-
-
-
-
-    3     58456
-    2     44683
-    6     18414
-    4     16810
-    5     13067
-    1     11577
-    7      1627
-    0        44
-    8         4
-    10        2
-    11        1
-    Name: number_of_stations_all, dtype: int64
-
-
+なぜか家の近くの駅数が5駅よりも6駅の方が多いですね。。
 
 ### 1,2,3番目に近い駅を抽出
 
@@ -869,12 +676,339 @@ df_all['second_near_station'] = second_near_station
 df_all['third_near_station'] = third_near_station
 ```
 
-### 床面積
+## 掲載物件数の多い最寄り駅TOP10
+
+
+```python
+df_all.groupby('first_near_station').count().sort_values(by='address', ascending=False)[['address']].head(10)
+```
+
+
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>address</th>
+    </tr>
+    <tr>
+      <th>first_near_station</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>ＪＲ中央線 八王子駅</th>
+      <td>2288</td>
+    </tr>
+    <tr>
+      <th>ＪＲ中央線 西八王子駅</th>
+      <td>1794</td>
+    </tr>
+    <tr>
+      <th>東京メトロ東西線 葛西駅</th>
+      <td>1685</td>
+    </tr>
+    <tr>
+      <th>ＪＲ総武線 小岩駅</th>
+      <td>1475</td>
+    </tr>
+    <tr>
+      <th>ＪＲ中央線 三鷹駅</th>
+      <td>1307</td>
+    </tr>
+    <tr>
+      <th>ＪＲ総武線 新小岩駅</th>
+      <td>1269</td>
+    </tr>
+    <tr>
+      <th>京王相模原線 京王堀之内駅</th>
+      <td>1186</td>
+    </tr>
+    <tr>
+      <th>小田急小田原線 町田駅</th>
+      <td>1139</td>
+    </tr>
+    <tr>
+      <th>西武池袋線 大泉学園駅</th>
+      <td>1018</td>
+    </tr>
+    <tr>
+      <th>ＪＲ中央線 国分寺駅</th>
+      <td>1000</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+23区外が上位を占めていますね。需要と供給の観点から考えて、区外は供給過多のため家賃が安い、区内は供給不足のため家賃が高いと考えられます。
+
+## 最寄り駅までの時間
+
+
+```python
+df_all['time_to_go_nearest_station'] = \
+        df_all['traffic'].apply(lambda x: re.findall('徒歩(\d+)分', x)[0] if '徒歩' in x else None).astype('float')
+```
+
+### 最寄り駅までの時間のヒストグラム
+
+
+```python
+plt.figure(figsize=(12, 8))
+plt.hist(df_all['time_to_go_nearest_station'], bins=30)
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_56_0.png)
+
+
+## 最寄り駅までの時間TOP20
+
+
+```python
+df_all.groupby('time_to_go_nearest_station').count().sort_values(by='address', ascending=False)[['address']].head(20)
+```
+
+
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>address</th>
+    </tr>
+    <tr>
+      <th>time_to_go_nearest_station</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>5.0</th>
+      <td>18464</td>
+    </tr>
+    <tr>
+      <th>3.0</th>
+      <td>13669</td>
+    </tr>
+    <tr>
+      <th>6.0</th>
+      <td>13486</td>
+    </tr>
+    <tr>
+      <th>7.0</th>
+      <td>13397</td>
+    </tr>
+    <tr>
+      <th>4.0</th>
+      <td>13269</td>
+    </tr>
+    <tr>
+      <th>8.0</th>
+      <td>12895</td>
+    </tr>
+    <tr>
+      <th>10.0</th>
+      <td>11976</td>
+    </tr>
+    <tr>
+      <th>2.0</th>
+      <td>9882</td>
+    </tr>
+    <tr>
+      <th>9.0</th>
+      <td>9766</td>
+    </tr>
+    <tr>
+      <th>12.0</th>
+      <td>6586</td>
+    </tr>
+    <tr>
+      <th>1.0</th>
+      <td>5753</td>
+    </tr>
+    <tr>
+      <th>13.0</th>
+      <td>5637</td>
+    </tr>
+    <tr>
+      <th>15.0</th>
+      <td>5449</td>
+    </tr>
+    <tr>
+      <th>11.0</th>
+      <td>5023</td>
+    </tr>
+    <tr>
+      <th>14.0</th>
+      <td>4244</td>
+    </tr>
+    <tr>
+      <th>17.0</th>
+      <td>2487</td>
+    </tr>
+    <tr>
+      <th>18.0</th>
+      <td>2355</td>
+    </tr>
+    <tr>
+      <th>16.0</th>
+      <td>2061</td>
+    </tr>
+    <tr>
+      <th>20.0</th>
+      <td>1872</td>
+    </tr>
+    <tr>
+      <th>19.0</th>
+      <td>1410</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+最寄り駅までの時間が10分と11分で不自然に隔たりがある。このことから最寄り駅までの時間は正確な時間ではなく、できるだけ10分以内に収まるように操作されている可能性がある。
+
+## 間取り
+|アルファベット  |意味  |
+|---|---|
+|R  |一般的に1部屋の中にキッチンが含まれている間取り  |
+|K  |居室とキッチンの間に間仕切りがある間取り  |
+|D  |キッチンで食事がとれるようなスペースがある  |
+|L  |食事やテレビを見たりできるようなダイニングよりもさらに広いスペースがある  |
+|S  |サービスルームの略。採光が不足し居室とは認められないがフリースペースとして使える部屋  |
+
+参考：https://suumo.jp/yougo/m/madori/
+
+
+```python
+df_all['floor_plan'] = df_all['floor_plan'].apply(lambda x: x.split()[0])
+```
+
+### 間取りのヒストグラム
+
+
+```python
+plt.figure(figsize=(14,8))
+plt.hist(df_all['floor_plan'], bins=100)
+plt.tick_params(axis='x', labelrotation=90)
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_63_0.png)
+
+
+## 床面積
 
 
 ```python
 df_all['floor_space'] = df_all['floor_space'].apply(lambda x: x.rstrip('m²').replace(',', '')).astype('float')
 ```
+
+
+```python
+df_all['floor_space'].describe()
+```
+
+
+
+
+    count    164685.000000
+    mean         32.126207
+    std          16.606834
+    min           1.000000
+    25%          20.560000
+    50%          26.400000
+    75%          40.500000
+    max        2422.000000
+    Name: floor_space, dtype: float64
+
+
+
+### 床面積のヒストグラム
+
+
+```python
+plt.figure(figsize=(14,8))
+plt.hist(df_all['floor_space'], bins=100)
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_68_0.png)
+
+
+最大の床面積を持つ物件を確認してみます。
+
+
+```python
+df_all[df_all.floor_space==df_all.floor_space.max()][['how_old', 'floor_plan', 'floor_space', 'target']]
+```
+
+
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>how_old</th>
+      <th>floor_plan</th>
+      <th>floor_space</th>
+      <th>target</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>138517</th>
+      <td>1985年10月 ( 築35年 )</td>
+      <td>1K</td>
+      <td>2422.0</td>
+      <td>53000</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+築35年の1Kの賃貸が最大の床面積とは考えにくく、床面積の誤入力だと推定できます。  
+この物件情報は削除します。
+
+
+```python
+idx = df_all[df_all.floor_space==df_all.floor_space.max()][['how_old', 'floor_plan', 'floor_space', 'target']].index[0]
+df_all.drop(index=idx, inplace=True)
+```
+
+誤入力による外れ値を削除したので、再度ヒストグラムを表示します。
+
+### 床面積のヒストグラム（外れ値消去）
+
+
+```python
+plt.figure(figsize=(14,8))
+plt.hist(df_all[df_all.floor_space<=100].floor_space, bins=100)
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_75_0.png)
+
+
+分布は多峰性（山が複数ある）であることがわかります。これは違う間取りの分布を重ねた分布であるからだと推測できます。（つまり、例えば1Rだけの間取りでヒストグラムを見ると単峰性だが、違う間取りを重ねると多峰性になる）
 
 ### 築年数
 
@@ -884,6 +1018,8 @@ df_all['floor_space'] = df_all['floor_space'].apply(lambda x: x.rstrip('m²').re
 df_all['how_old'] = df_all['how_old'].apply(lambda x: re.findall(' 築(\d+)年 ', x.replace('新築', '築0年'))[0]).astype('int')
 ```
 
+### 築年数のヒストグラム
+
 
 ```python
 plt.figure(figsize=(14,8))
@@ -892,10 +1028,81 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_53_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_80_0.png)
 
 
-### 敷金・礼金
+### 築年数のTOP10
+
+
+```python
+df_all.groupby('how_old').count().sort_values(by='address', ascending=False)[['address']].head(10)
+```
+
+
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>address</th>
+    </tr>
+    <tr>
+      <th>how_old</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>16453</td>
+    </tr>
+    <tr>
+      <th>31</th>
+      <td>7010</td>
+    </tr>
+    <tr>
+      <th>30</th>
+      <td>6768</td>
+    </tr>
+    <tr>
+      <th>32</th>
+      <td>6574</td>
+    </tr>
+    <tr>
+      <th>29</th>
+      <td>6272</td>
+    </tr>
+    <tr>
+      <th>33</th>
+      <td>5581</td>
+    </tr>
+    <tr>
+      <th>28</th>
+      <td>5444</td>
+    </tr>
+    <tr>
+      <th>27</th>
+      <td>5279</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>4527</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>4418</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+新築、築30年前後、築15年前後の順に多いです。新築が多いのは当然だとして、築30年前後が築15年前後よりも多いのは「古い物件の家賃の安さ」よりも「適度な家賃と老朽度」の築15年前後の方が人気だからでしょう。
+
+## 敷金・礼金
 敷金・礼金をそのまま使うとデータリークするため、金額が記載されている場合は、何か月分の家賃かに置換する。
 
 
@@ -935,7 +1142,145 @@ df_all['security_deposit'] = df_all.apply(preprocess_security_deposit, axis=1)
 df_all['key_money'] = df_all.apply(preprocess_key_money, axis=1)
 ```
 
-### 更新料
+### 礼金のヒストグラム
+
+
+```python
+plt.figure(figsize=(14,8))
+plt.hist(df_all['key_money'], bins=100)
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_88_0.png)
+
+
+礼金が最大の物件について見てみる
+
+
+```python
+df_all[df_all.key_money==df_all.key_money.max()][['how_old', 'floor_plan', 'floor_space', 'target', 'key_money']]
+```
+
+
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>how_old</th>
+      <th>floor_plan</th>
+      <th>floor_space</th>
+      <th>target</th>
+      <th>key_money</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>22390</th>
+      <td>4</td>
+      <td>1K</td>
+      <td>28.4</td>
+      <td>120000</td>
+      <td>17.0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+1Kの家賃12万の物件の礼金が家賃17ヶ月分は考えにくいので誤入力と思われます。
+
+
+```python
+idx = df_all[df_all.key_money==df_all.key_money.max()][['how_old', 'floor_plan', 'floor_space', 'target', 'key_money']].index[0]
+df_all.drop(index=idx, inplace=True)
+```
+
+### 礼金のヒストグラム（外れ値削除）
+
+
+```python
+plt.figure(figsize=(14,8))
+plt.hist(df_all['key_money'], bins=100)
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_94_0.png)
+
+
+### 敷金のヒストグラム
+
+
+```python
+plt.figure(figsize=(14,8))
+plt.hist(df_all['security_deposit'], bins=100)
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_96_0.png)
+
+
+
+```python
+df_all[df_all.security_deposit==df_all.security_deposit.max()][['how_old', 'floor_plan', 'floor_space', 'target', 'key_money', 'security_deposit']]
+```
+
+
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>how_old</th>
+      <th>floor_plan</th>
+      <th>floor_space</th>
+      <th>target</th>
+      <th>key_money</th>
+      <th>security_deposit</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>42337</th>
+      <td>11</td>
+      <td>1LDK</td>
+      <td>40.02</td>
+      <td>145000</td>
+      <td>1.0</td>
+      <td>11.0</td>
+    </tr>
+    <tr>
+      <th>57490</th>
+      <td>11</td>
+      <td>1LDK</td>
+      <td>40.02</td>
+      <td>145000</td>
+      <td>1.0</td>
+      <td>11.0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+これも敷金が11ヶ月は考えにくいですね。。
+
+
+```python
+idx = df_all[df_all.security_deposit==df_all.security_deposit.max()][['how_old', 'floor_plan', 'floor_space', 'target', 'key_money']].index
+df_all.drop(index=idx, inplace=True)
+```
+
+## 更新料
 
 
 ```python
@@ -953,129 +1298,67 @@ def preprocess_renewal_fee(row):
 df_all['renewal_fee'] = df_all.apply(preprocess_renewal_fee, axis=1)
 ```
 
-### 最寄り駅までの時間
+### 更新料のヒストグラム
 
 
 ```python
-df_all['time_to_go_nearest_station'] = \
-        df_all['traffic'].apply(lambda x: re.findall('徒歩(\d+)分', x)[0] if '徒歩' in x else None).astype('float')
-```
-
-### 階数
-
-301階なるものが存在しますが、中国で構想段階の300階建てのビル（1228m）に匹敵する高さなので明らかに間違いです笑  
-3階になおしておきます。
-
-
-```python
-df_all[df_all['name']=='ロイヤルコートＫａｙＡＢ'].floor
+plt.figure(figsize=(14,8))
+plt.hist(df_all['renewal_fee'], bins=100)
+plt.show()
 ```
 
 
-
-
-    38283    301階/B206
-    Name: floor, dtype: object
-
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_103_0.png)
 
 
 
 ```python
-df_all.loc[df_all[df_all['name']=='ロイヤルコートＫａｙＡＢ'].index, 'floor'] = '3階'
-```
-
-
-```python
-df_all[['floor2','floor']]
+df_all[df_all.renewal_fee==df_all.renewal_fee.max()][['how_old', 'floor_plan', 'floor_space', 'target', 'key_money', 'security_deposit', 'renewal_fee']]
 ```
 
 
 
 
 <div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>floor2</th>
-      <th>floor</th>
+      <th>how_old</th>
+      <th>floor_plan</th>
+      <th>floor_space</th>
+      <th>target</th>
+      <th>key_money</th>
+      <th>security_deposit</th>
+      <th>renewal_fee</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <th>0</th>
-      <td>4階 / 4階建\n</td>
-      <td>4階/401</td>
-    </tr>
-    <tr>
-      <th>1</th>
-      <td>2階 / 12階建\n</td>
-      <td>2階/-</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>3階 / 12階建\n</td>
-      <td>3階/-</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>2階 / 3階建\n</td>
-      <td>2階/205</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>2階 / 3階建\n</td>
-      <td>2階/201</td>
-    </tr>
-    <tr>
-      <th>...</th>
-      <td>...</td>
-      <td>...</td>
-    </tr>
-    <tr>
-      <th>164680</th>
-      <td>4階 / 9階建\n</td>
-      <td>4階/-</td>
-    </tr>
-    <tr>
-      <th>164681</th>
-      <td>2階 / 9階建\n</td>
-      <td>2階/-</td>
-    </tr>
-    <tr>
-      <th>164682</th>
-      <td>1階 / 2階建\n</td>
-      <td>1階/-</td>
-    </tr>
-    <tr>
-      <th>164683</th>
-      <td>2階 / 2階建\n</td>
-      <td>NaN</td>
-    </tr>
-    <tr>
-      <th>164684</th>
-      <td>2階 / 2階建\n</td>
-      <td>NaN</td>
+      <th>30421</th>
+      <td>10</td>
+      <td>ワンルーム</td>
+      <td>12.11</td>
+      <td>65000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>16.0</td>
     </tr>
   </tbody>
 </table>
-<p>164685 rows × 2 columns</p>
 </div>
 
 
+
+ワンルームの物件が更新費用が家賃16ヶ月分は考えにくいので削除します
+
+
+```python
+idx = df_all[df_all.renewal_fee==df_all.renewal_fee.max()][['how_old', 'floor_plan', 'floor_space', 'target', 'key_money']].index
+df_all.drop(index=idx, inplace=True)
+```
+
+### 階数
 
 
 ```python
@@ -1102,8 +1385,74 @@ df_all['floor'] = df_all['floor2'].apply(lambda x: re.findall('(\d+)階', x)[0] 
 
 
 ```python
+df_all[df_all.floor==df_all.floor.max()][['how_old', 'floor_plan', 'floor_space', 'target', 'key_money', 'security_deposit', 'renewal_fee', 'floor']]
+```
+
+
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>how_old</th>
+      <th>floor_plan</th>
+      <th>floor_space</th>
+      <th>target</th>
+      <th>key_money</th>
+      <th>security_deposit</th>
+      <th>renewal_fee</th>
+      <th>floor</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>38283</th>
+      <td>13</td>
+      <td>1LDK</td>
+      <td>33.39</td>
+      <td>75000</td>
+      <td>0.277778</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>301</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+301階は考えにくいので削除します。
+
+
+```python
+idx = df_all[df_all.floor==df_all.floor.max()][['how_old', 'floor_plan', 'floor_space', 'target', 'key_money']].index
+df_all.drop(index=idx, inplace=True)
+```
+
+### 階数のヒストグラム
+
+
+```python
+plt.figure(figsize=(14,8))
+plt.hist(df_all['floor'], bins=100)
+plt.show()
+```
+
+
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_115_0.png)
+
+
+`target`という変数を新たに作成したので不要なカラムは削除します
+
+
+```python
 df_all.drop(['rent', 'service_fee'], axis=1, inplace=True)
 ```
+
+### 相関マップ
 
 
 ```python
@@ -1126,7 +1475,7 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_70_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_119_0.png)
 
 
 ### ヒートマップからわかること
@@ -1148,19 +1497,6 @@ partial_corr(data=df_all, x='auto_lock', y='target', covar='how_old', method='pe
 
 
 <div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -1178,11 +1514,11 @@ partial_corr(data=df_all, x='auto_lock', y='target', covar='how_old', method='pe
   <tbody>
     <tr>
       <th>pearson</th>
-      <td>164685</td>
-      <td>0.301203</td>
+      <td>164679</td>
+      <td>0.301206</td>
       <td>[0.3, 0.31]</td>
-      <td>0.090723</td>
-      <td>0.090712</td>
+      <td>0.090725</td>
+      <td>0.090714</td>
       <td>0.0</td>
       <td>inf</td>
       <td>1.0</td>
@@ -1195,39 +1531,6 @@ partial_corr(data=df_all, x='auto_lock', y='target', covar='how_old', method='pe
 
 家賃とオートロックの相関係数は0.45だったが、第三の変数を築年数とした擬似相関は0.30となった。  
 したがって、築年数の影響を除いた後の家賃とオートロックの関係はさほど強くないことがわかる。
-
-### 間取り
-|アルファベット  |意味  |
-|---|---|
-|R  |一般的に1部屋の中にキッチンが含まれている間取り  |
-|K  |居室とキッチンの間に間仕切りがある間取り  |
-|D  |キッチンで食事がとれるようなスペースがある  |
-|L  |食事やテレビを見たりできるようなダイニングよりもさらに広いスペースがある  |
-|S  |サービスルームの略。採光が不足し居室とは認められないがフリースペースとして使える部屋  |
-
-参考：https://suumo.jp/yougo/m/madori/
-
-
-```python
-df_all['floor_plan'] = df_all['floor_plan'].apply(lambda x: x.split()[0])
-```
-
-
-```python
-df_all['floor_plan'].unique()
-```
-
-
-
-
-    array(['ワンルーム', '1K', '1LDK', '1DK', '3LDK', '2K', '2LDK', '2DK', '2SLDK',
-           '1SK', '1SLDK', '3DK', '1SDK', '1SLK', '3K', '2SDK', '1LK',
-           '3SLDK', '4DK', '4LDK', '4SLDK', '3SDK', '10K', '2LK', '5SLDK',
-           '5DK', '2R', '4K', '2SLK', '5K', '2SK', '5LDK', '3LK', '6R', '15K',
-           '3SK', '5SK', '4SDK', '11K', '8LDK', '6LDK', '7LDK', '5SDK',
-           '6SLDK', '3SLK', '6DK', '12DK', '7SLDK', '4SK'], dtype=object)
-
-
 
 ### 住所
 
@@ -1267,32 +1570,387 @@ def extract_town_name(row):
 df_all['town'] = df_all['address'].apply(extract_town_name)
 ```
 
+### 家賃が高い地域TOP30
+
 
 ```python
-numeric_col = [s for s in df_all.columns if df_all[s].dtype != 'object']
-object_col = ['city', 'floor_plan', 'first_near_station', 'second_near_station', 'third_near_station', 'status', 'address', 'address_town', 'name', 'url', 'structure']
+df_temp = df_all.groupby('town').target.agg(['mean', 'count'])
 ```
 
 
 ```python
-df = df_all[numeric_col + object_col]
+df_temp[df_temp['count'] >= 10].sort_values(by='mean', ascending=False).head(30)
 ```
 
 
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>mean</th>
+      <th>count</th>
+    </tr>
+    <tr>
+      <th>town</th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>東京都千代田区三番町</th>
+      <td>333375.000000</td>
+      <td>24</td>
+    </tr>
+    <tr>
+      <th>東京都千代田区西神田</th>
+      <td>303043.478261</td>
+      <td>23</td>
+    </tr>
+    <tr>
+      <th>東京都中央区晴海</th>
+      <td>280552.183908</td>
+      <td>87</td>
+    </tr>
+    <tr>
+      <th>東京都港区東新橋</th>
+      <td>250750.000000</td>
+      <td>24</td>
+    </tr>
+    <tr>
+      <th>東京都港区虎ノ門</th>
+      <td>225257.575758</td>
+      <td>33</td>
+    </tr>
+    <tr>
+      <th>東京都渋谷区恵比寿西</th>
+      <td>224439.393939</td>
+      <td>33</td>
+    </tr>
+    <tr>
+      <th>東京都中央区勝どき</th>
+      <td>222157.746479</td>
+      <td>355</td>
+    </tr>
+    <tr>
+      <th>東京都江東区有明</th>
+      <td>211911.764706</td>
+      <td>34</td>
+    </tr>
+    <tr>
+      <th>東京都渋谷区松濤</th>
+      <td>211909.090909</td>
+      <td>11</td>
+    </tr>
+    <tr>
+      <th>東京都江東区豊洲</th>
+      <td>209931.972789</td>
+      <td>294</td>
+    </tr>
+    <tr>
+      <th>東京都港区六本木</th>
+      <td>209088.299320</td>
+      <td>147</td>
+    </tr>
+    <tr>
+      <th>東京都港区元麻布</th>
+      <td>204975.000000</td>
+      <td>40</td>
+    </tr>
+    <tr>
+      <th>東京都渋谷区渋谷</th>
+      <td>199958.333333</td>
+      <td>60</td>
+    </tr>
+    <tr>
+      <th>東京都中央区日本橋小舟町</th>
+      <td>199900.000000</td>
+      <td>20</td>
+    </tr>
+    <tr>
+      <th>東京都港区南青山</th>
+      <td>198618.131868</td>
+      <td>182</td>
+    </tr>
+    <tr>
+      <th>東京都江東区東雲</th>
+      <td>197554.050193</td>
+      <td>259</td>
+    </tr>
+    <tr>
+      <th>東京都港区西新橋</th>
+      <td>196265.151515</td>
+      <td>66</td>
+    </tr>
+    <tr>
+      <th>東京都渋谷区神宮前</th>
+      <td>195959.016393</td>
+      <td>61</td>
+    </tr>
+    <tr>
+      <th>東京都新宿区払方町</th>
+      <td>195842.105263</td>
+      <td>19</td>
+    </tr>
+    <tr>
+      <th>東京都中央区日本橋馬喰町</th>
+      <td>192992.682927</td>
+      <td>205</td>
+    </tr>
+    <tr>
+      <th>東京都新宿区新小川町</th>
+      <td>189780.000000</td>
+      <td>50</td>
+    </tr>
+    <tr>
+      <th>東京都渋谷区大山町</th>
+      <td>188800.000000</td>
+      <td>10</td>
+    </tr>
+    <tr>
+      <th>東京都港区芝浦</th>
+      <td>188309.727626</td>
+      <td>257</td>
+    </tr>
+    <tr>
+      <th>東京都港区浜松町</th>
+      <td>181306.250000</td>
+      <td>80</td>
+    </tr>
+    <tr>
+      <th>東京都千代田区麹町</th>
+      <td>179959.090909</td>
+      <td>22</td>
+    </tr>
+    <tr>
+      <th>東京都渋谷区恵比寿南</th>
+      <td>179758.064516</td>
+      <td>62</td>
+    </tr>
+    <tr>
+      <th>東京都江東区辰巳</th>
+      <td>178707.703704</td>
+      <td>27</td>
+    </tr>
+    <tr>
+      <th>東京都品川区上大崎</th>
+      <td>176504.878049</td>
+      <td>123</td>
+    </tr>
+    <tr>
+      <th>東京都港区赤坂</th>
+      <td>175818.892368</td>
+      <td>511</td>
+    </tr>
+    <tr>
+      <th>東京都港区台場</th>
+      <td>175700.000000</td>
+      <td>10</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+### 家賃が安い地域TOP30
+
+
 ```python
-df['target'] = np.log1p(df['target'].copy())
+df_temp[df_temp['count'] >= 10].sort_values(by='mean').head(30)
 ```
 
 
+
+
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>mean</th>
+      <th>count</th>
+    </tr>
+    <tr>
+      <th>town</th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>東京都日野市程久保</th>
+      <td>40216.571429</td>
+      <td>175</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市滝山町</th>
+      <td>42206.896552</td>
+      <td>29</td>
+    </tr>
+    <tr>
+      <th>東京都西東京市緑町</th>
+      <td>43578.947368</td>
+      <td>19</td>
+    </tr>
+    <tr>
+      <th>東京都町田市忠生</th>
+      <td>44971.264368</td>
+      <td>87</td>
+    </tr>
+    <tr>
+      <th>東京都武蔵村山市中藤</th>
+      <td>44991.666667</td>
+      <td>12</td>
+    </tr>
+    <tr>
+      <th>東京都多摩市山王下</th>
+      <td>45514.285714</td>
+      <td>35</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市丹木町</th>
+      <td>46466.019417</td>
+      <td>103</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市寺町</th>
+      <td>46678.571429</td>
+      <td>14</td>
+    </tr>
+    <tr>
+      <th>東京都多摩市馬引沢</th>
+      <td>46726.027397</td>
+      <td>146</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市追分町</th>
+      <td>47133.333333</td>
+      <td>30</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市中野上町</th>
+      <td>47350.000000</td>
+      <td>210</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市加住町</th>
+      <td>47821.428571</td>
+      <td>14</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市鑓水</th>
+      <td>47966.666667</td>
+      <td>24</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市暁町</th>
+      <td>48626.943005</td>
+      <td>193</td>
+    </tr>
+    <tr>
+      <th>東京都多摩市中沢</th>
+      <td>49220.338983</td>
+      <td>59</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市中野山王</th>
+      <td>49420.118343</td>
+      <td>169</td>
+    </tr>
+    <tr>
+      <th>東京都町田市東玉川学園</th>
+      <td>49458.333333</td>
+      <td>24</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市寺田町</th>
+      <td>49586.666667</td>
+      <td>15</td>
+    </tr>
+    <tr>
+      <th>東京都あきる野市二宮東</th>
+      <td>49947.368421</td>
+      <td>19</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市万町</th>
+      <td>50000.000000</td>
+      <td>12</td>
+    </tr>
+    <tr>
+      <th>東京都多摩市南野</th>
+      <td>50270.833333</td>
+      <td>48</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市四谷町</th>
+      <td>50615.384615</td>
+      <td>13</td>
+    </tr>
+    <tr>
+      <th>東京都青梅市千ヶ瀬町</th>
+      <td>50738.095238</td>
+      <td>42</td>
+    </tr>
+    <tr>
+      <th>東京都東村山市多摩湖町</th>
+      <td>50992.307692</td>
+      <td>39</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市大塚</th>
+      <td>51386.106870</td>
+      <td>262</td>
+    </tr>
+    <tr>
+      <th>東京都小平市たかの台</th>
+      <td>51500.000000</td>
+      <td>11</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市左入町</th>
+      <td>51500.000000</td>
+      <td>13</td>
+    </tr>
+    <tr>
+      <th>東京都あきる野市小川東</th>
+      <td>51571.428571</td>
+      <td>14</td>
+    </tr>
+    <tr>
+      <th>東京都八王子市小比企町</th>
+      <td>51590.909091</td>
+      <td>33</td>
+    </tr>
+    <tr>
+      <th>東京都青梅市東青梅</th>
+      <td>51696.629213</td>
+      <td>89</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+## その他の特徴量のヒストグラム
+
+
 ```python
-plt.figure(figsize=(12, 8))
-plt.hist(np.ceil(df_all['target']), bins=20)
+fig = df_all.hist(bins=50, figsize=(20,90), layout=(25, 1), xlabelsize=15, ylabelsize=15)
+[x.title.set_size(25) for x in fig.ravel()]
 plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_87_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_136_0.png)
 
+
+## 特別区の地図上に平均家賃価格を可視化
 
 
 ```python
@@ -1316,21 +1974,72 @@ plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_89_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_139_0.png)
 
 
-港区、中央区を中心として放射線状に価格が分布していることがわかる。
+港区、中央区を中心として放射線状に価格が分布していることがわかります。
+
+### APIで経度・緯度を取得し、地区の平均家賃価格をプロット
 
 
 ```python
-fig = df_all.hist(bins=50, figsize=(20,90), layout=(25, 1), xlabelsize=15, ylabelsize=15)
-[x.title.set_size(25) for x in fig.ravel()]
+import ast
+
+# from geopy.geocoders import Nominatim
+# from geopy.extra.rate_limiter import RateLimiter
+
+# geolocator = Nominatim()
+# geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+
+# location_dict = {}
+# for i,s in enumerate(df_all.town.unique()):
+#     print(i)
+#     if s:
+#         loc = geocode(s)
+#         if loc:
+#             location_dict[s] = loc[1]
+# pd.DataFrame.from_dict({'location': location_dict}).to_csv('data/location.csv')
+
+df_loc = pd.read_csv('data/location.csv', index_col=0, converters={"location": ast.literal_eval})
+df_loc['latitude'] = [s[0] for s in df_loc.location]
+df_loc['longitude'] = [s[1] for s in df_loc.location]
+
+df_loc_target = pd.merge(df_all[df_all.town.isin(df_loc.index)].groupby('town').mean()[['time_to_go_nearest_station']], df_loc ,left_index=True, right_index=True)
+
+df_toshin.plot(column='mean', figsize=(20,12), legend=True, legend_kwds={'label': "Mean rent"}, cmap='viridis')
+for idx, row in df_toshin.iterrows():
+    plt.annotate(s=row['ward_en'], xy=row['coords'],
+                 horizontalalignment='center', color='white')
+plt.scatter(df_loc_target[(df_loc_target.latitude >=35) & (df_loc_target.longitude >= 139.6)].longitude,
+            df_loc_target[(df_loc_target.latitude >=35) & (df_loc_target.longitude >= 139.6)].latitude,
+            s=df_loc_target.time_to_go_nearest_station*20, alpha=0.6, c='red')
+plt.title('Average rent for each city', fontsize=25)
 plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_91_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_142_0.png)
 
+
+この図からあんまり得られる情報はありません。こんなことも出来るんだ程度に見てください。
+
+
+```python
+numeric_col = [s for s in df_all.columns if df_all[s].dtype != 'object']
+object_col = ['city', 'floor_plan', 'first_near_station', 'second_near_station', 'third_near_station', 'status', 'address', 'address_town', 'name', 'url', 'structure']
+```
+
+
+```python
+df = df_all[numeric_col + object_col]
+```
+
+目的変数の対数変換
+
+
+```python
+df['target'] = np.log1p(df['target'].copy())
+```
 
 
 ```python
@@ -1449,61 +2158,69 @@ print(f'RMSE {rmse}円')
 
     fold 0
     Training until validation scores don't improve for 500 rounds
-    [500]	training's rmse: 0.0631642	valid_1's rmse: 0.0986051
-    [1000]	training's rmse: 0.0495684	valid_1's rmse: 0.0959534
-    [1500]	training's rmse: 0.0414072	valid_1's rmse: 0.0948733
-    [2000]	training's rmse: 0.0354313	valid_1's rmse: 0.0943384
-    [2500]	training's rmse: 0.0304207	valid_1's rmse: 0.093974
-    [3000]	training's rmse: 0.0267761	valid_1's rmse: 0.0937303
-    [3500]	training's rmse: 0.0237264	valid_1's rmse: 0.0935834
-    [4000]	training's rmse: 0.0212886	valid_1's rmse: 0.0934899
-    [4500]	training's rmse: 0.0192518	valid_1's rmse: 0.0934278
-    [5000]	training's rmse: 0.0174473	valid_1's rmse: 0.0933583
-    [5500]	training's rmse: 0.0159835	valid_1's rmse: 0.0933249
-    [6000]	training's rmse: 0.014847	valid_1's rmse: 0.0933065
-    [6500]	training's rmse: 0.0137962	valid_1's rmse: 0.0933026
-    [7000]	training's rmse: 0.012819	valid_1's rmse: 0.0932903
-    [7500]	training's rmse: 0.0120236	valid_1's rmse: 0.0932908
-    [8000]	training's rmse: 0.0113391	valid_1's rmse: 0.0932879
+    [500]	training's rmse: 0.0620642	valid_1's rmse: 0.0985041
+    [1000]	training's rmse: 0.0487933	valid_1's rmse: 0.0957398
+    [1500]	training's rmse: 0.0401117	valid_1's rmse: 0.0944433
+    [2000]	training's rmse: 0.0343744	valid_1's rmse: 0.0938105
+    [2500]	training's rmse: 0.0297608	valid_1's rmse: 0.0934359
+    [3000]	training's rmse: 0.0260618	valid_1's rmse: 0.0932451
+    [3500]	training's rmse: 0.023066	valid_1's rmse: 0.093079
+    [4000]	training's rmse: 0.0205726	valid_1's rmse: 0.0929632
+    [4500]	training's rmse: 0.0185568	valid_1's rmse: 0.0928923
+    [5000]	training's rmse: 0.0168284	valid_1's rmse: 0.0928516
+    [5500]	training's rmse: 0.0154795	valid_1's rmse: 0.0928408
+    [6000]	training's rmse: 0.0142143	valid_1's rmse: 0.0928176
+    [6500]	training's rmse: 0.0132527	valid_1's rmse: 0.0928068
+    [7000]	training's rmse: 0.0123708	valid_1's rmse: 0.092807
     Early stopping, best iteration is:
-    [7898]	training's rmse: 0.0114731	valid_1's rmse: 0.0932839
+    [6865]	training's rmse: 0.0125814	valid_1's rmse: 0.0927934
     fold 1
     Training until validation scores don't improve for 500 rounds
-    [500]	training's rmse: 0.0631286	valid_1's rmse: 0.0981498
-    [1000]	training's rmse: 0.0492893	valid_1's rmse: 0.0951999
-    [1500]	training's rmse: 0.0407562	valid_1's rmse: 0.0940201
-    [2000]	training's rmse: 0.0347757	valid_1's rmse: 0.0934227
-    [2500]	training's rmse: 0.0299916	valid_1's rmse: 0.0930726
-    [3000]	training's rmse: 0.0260634	valid_1's rmse: 0.0928807
-    [3500]	training's rmse: 0.0230268	valid_1's rmse: 0.0927485
-    [4000]	training's rmse: 0.020631	valid_1's rmse: 0.0926608
-    [4500]	training's rmse: 0.018581	valid_1's rmse: 0.0926178
-    [5000]	training's rmse: 0.016929	valid_1's rmse: 0.092613
-    [5500]	training's rmse: 0.0154978	valid_1's rmse: 0.0925927
-    [6000]	training's rmse: 0.0142536	valid_1's rmse: 0.0925906
+    [500]	training's rmse: 0.0623229	valid_1's rmse: 0.097126
+    [1000]	training's rmse: 0.0493847	valid_1's rmse: 0.0944533
+    [1500]	training's rmse: 0.0411358	valid_1's rmse: 0.0933576
+    [2000]	training's rmse: 0.0350585	valid_1's rmse: 0.0926453
+    [2500]	training's rmse: 0.0304515	valid_1's rmse: 0.0922679
+    [3000]	training's rmse: 0.0266654	valid_1's rmse: 0.0920523
+    [3500]	training's rmse: 0.0236033	valid_1's rmse: 0.0918693
+    [4000]	training's rmse: 0.021205	valid_1's rmse: 0.0917438
+    [4500]	training's rmse: 0.0190847	valid_1's rmse: 0.0916698
+    [5000]	training's rmse: 0.01743	valid_1's rmse: 0.0916113
+    [5500]	training's rmse: 0.015964	valid_1's rmse: 0.0915749
+    [6000]	training's rmse: 0.0148459	valid_1's rmse: 0.0915459
+    [6500]	training's rmse: 0.0137299	valid_1's rmse: 0.0915021
+    [7000]	training's rmse: 0.0127857	valid_1's rmse: 0.0914938
+    [7500]	training's rmse: 0.0119904	valid_1's rmse: 0.0914903
+    [8000]	training's rmse: 0.0113017	valid_1's rmse: 0.0914776
+    [8500]	training's rmse: 0.0107149	valid_1's rmse: 0.0914776
+    [9000]	training's rmse: 0.0101918	valid_1's rmse: 0.0914608
+    [9500]	training's rmse: 0.00978279	valid_1's rmse: 0.0914645
     Early stopping, best iteration is:
-    [5864]	training's rmse: 0.0145437	valid_1's rmse: 0.0925809
+    [9132]	training's rmse: 0.0100941	valid_1's rmse: 0.0914572
     fold 2
     Training until validation scores don't improve for 500 rounds
-    [500]	training's rmse: 0.0626492	valid_1's rmse: 0.0992168
-    [1000]	training's rmse: 0.0496513	valid_1's rmse: 0.0962459
-    [1500]	training's rmse: 0.0410383	valid_1's rmse: 0.0949109
-    [2000]	training's rmse: 0.0350886	valid_1's rmse: 0.0942978
-    [2500]	training's rmse: 0.0304537	valid_1's rmse: 0.0939033
-    [3000]	training's rmse: 0.0269203	valid_1's rmse: 0.0936514
-    [3500]	training's rmse: 0.0238637	valid_1's rmse: 0.0934147
-    [4000]	training's rmse: 0.0214883	valid_1's rmse: 0.0932814
-    [4500]	training's rmse: 0.0194839	valid_1's rmse: 0.0932466
-    [5000]	training's rmse: 0.0177206	valid_1's rmse: 0.0931953
-    [5500]	training's rmse: 0.0161023	valid_1's rmse: 0.0931607
-    [6000]	training's rmse: 0.0148931	valid_1's rmse: 0.0931304
-    [6500]	training's rmse: 0.0137658	valid_1's rmse: 0.0931292
+    [500]	training's rmse: 0.0630023	valid_1's rmse: 0.0977646
+    [1000]	training's rmse: 0.0493929	valid_1's rmse: 0.0949977
+    [1500]	training's rmse: 0.0406841	valid_1's rmse: 0.0937988
+    [2000]	training's rmse: 0.0349311	valid_1's rmse: 0.0932718
+    [2500]	training's rmse: 0.0301731	valid_1's rmse: 0.0929056
+    [3000]	training's rmse: 0.0264926	valid_1's rmse: 0.0926949
+    [3500]	training's rmse: 0.0234339	valid_1's rmse: 0.0925585
+    [4000]	training's rmse: 0.0209832	valid_1's rmse: 0.0924572
+    [4500]	training's rmse: 0.0189538	valid_1's rmse: 0.0923834
+    [5000]	training's rmse: 0.01722	valid_1's rmse: 0.0923476
+    [5500]	training's rmse: 0.0158124	valid_1's rmse: 0.0923265
+    [6000]	training's rmse: 0.0145178	valid_1's rmse: 0.092309
+    [6500]	training's rmse: 0.0135356	valid_1's rmse: 0.0922969
+    [7000]	training's rmse: 0.0126584	valid_1's rmse: 0.0923015
     Early stopping, best iteration is:
-    [6083]	training's rmse: 0.0146468	valid_1's rmse: 0.0931201
-    RMSE 11162.000588413円
-    CPU times: user 53min 6s, sys: 31.6 s, total: 53min 38s
-    Wall time: 4min 47s
+    [6703]	training's rmse: 0.0131689	valid_1's rmse: 0.0922942
+    RMSE 10735.980383386666円
+    CPU times: user 57min 49s, sys: 37.7 s, total: 58min 27s
+    Wall time: 5min 17s
 
+
+## 変数重要度の可視化
 
 
 ```python
@@ -1520,19 +2237,36 @@ plt.tight_layout()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_98_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_155_0.png)
 
+
+## 精度評価
 
 
 ```python
-plt.figure(figsize=(6,6))
-plt.scatter(np.expm1(oof), np.expm1(y_train), alpha=0.3)
+pred_list = []
+for model in models:
+    pred_list.append(model.predict(X_test.drop(['url', 'name'], axis=1)))
+```
+
+
+```python
+y_pred = np.zeros_like(pred_list[0])
+for arr in pred_list:
+    y_pred += arr
+y_pred /= len(pred_list)
+```
+
+
+```python
+plt.figure(figsize=(12, 12))
+plt.scatter(np.expm1(y_pred), np.expm1(y_test), alpha=0.3)
 plt.tight_layout()
 plt.show()
 ```
 
 
-![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_99_0.png)
+![png](%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_files/%E4%B8%8D%E5%8B%95%E7%94%A3%E4%BE%A1%E6%A0%BC%E4%BA%88%E6%B8%AC_159_0.png)
 
 
 
@@ -1545,13 +2279,13 @@ def mean_absolute_percentage_error(y_true, y_pred):
 
 
 ```python
-mean_absolute_percentage_error(np.expm1(y_train), np.expm1(oof))
+mean_absolute_percentage_error(np.expm1(y_test), np.expm1(y_pred))
 ```
 
 
 
 
-    6.413988179078574
+    5.933115251734478
 
 
 
@@ -1576,119 +2310,7 @@ if model_save:
 
 
 ```python
-!rm -r 不動産価格予測_files
-!jupyter nbconvert --to markdown 不動産価格予測.ipynb
-!mv 不動産価格予測.md README.md
-```
-
-    [NbConvertApp] Converting notebook 不動産価格予測.ipynb to markdown
-    [NbConvertApp] Support files will be in 不動産価格予測_files/
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Making directory 不動産価格予測_files
-    [NbConvertApp] Writing 41596 bytes to 不動産価格予測.md
-
-
-
-```python
-# from geopy.geocoders import Nominatim
-# from geopy.extra.rate_limiter import RateLimiter
-
-# geolocator = Nominatim()
-# geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
-```
-
-
-```python
-# location_dict = {}
-# for i,s in enumerate(df_all.town.unique()):
-#     print(i)
-#     if s:
-#         loc = geocode(s)
-#         if loc:
-#             location_dict[s] = loc[1]
-```
-
-
-```python
-# pd.DataFrame.from_dict({'location': location_dict}).to_csv('data/location.csv')
-```
-
-
-```python
-import ast
-
-df_loc = pd.read_csv('data/location.csv', index_col=0, converters={"location": ast.literal_eval})
-```
-
-
-```python
-# import geopandas
-
-# gdf = geopandas.GeoDataFrame(
-#     index=df_loc.index, geometry=geopandas.points_from_xy([s[0] for s in df_loc.location], [s[1] for s in df_loc.location]))
-```
-
-
-```python
-df_loc['latitude'] = [s[0] for s in df_loc.location]
-df_loc['longitude'] = [s[1] for s in df_loc.location]
-```
-
-
-```python
-df_loc_target = pd.merge(df_all[df_all.town.isin(gdf.index)].groupby('town').mean()[['time_to_go_nearest_station']], df_loc ,left_index=True, right_index=True)
-```
-
-
-    ---------------------------------------------------------------------------
-
-    NameError                                 Traceback (most recent call last)
-
-    <ipython-input-76-85cd9aadf7a7> in <module>
-    ----> 1 df_loc_target = pd.merge(df_all[df_all.town.isin(gdf.index)].groupby('town').mean()[['time_to_go_nearest_station']], df_loc ,left_index=True, right_index=True)
-    
-
-    NameError: name 'gdf' is not defined
-
-
-
-```python
-df_toshin.plot(column='mean', figsize=(20,12), legend=True, legend_kwds={'label': "Mean rent"}, cmap='viridis')
-for idx, row in df_toshin.iterrows():
-    plt.annotate(s=row['ward_en'], xy=row['coords'],
-                 horizontalalignment='center', color='white')
-plt.scatter(df_loc_target[(df_loc_target.latitude >=35) & (df_loc_target.longitude >= 139.6)].longitude,
-            df_loc_target[(df_loc_target.latitude >=35) & (df_loc_target.longitude >= 139.6)].latitude,
-            s=df_loc_target.time_to_go_nearest_station*20, alpha=0.6, c='red')
-plt.title('Average rent for each city', fontsize=25)
-plt.show()
-```
-
-
-```python
-df_temp = df_all.groupby('town').target.agg(['mean', 'count'])
-```
-
-
-```python
-df_temp[df_temp['count'] >= 10].sort_values(by='mean', ascending=False).head(30)
-```
-
-
-```python
-df_temp[df_temp['count'] >= 10].sort_values(by='mean').head(30)
-```
-
-
-```python
-
+# !rm -r 不動産価格予測_files
+# !jupyter nbconvert --to markdown 不動産価格予測.ipynb
+# !mv 不動産価格予測.md README.md
 ```
