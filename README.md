@@ -332,11 +332,9 @@ df_all.info()
 
 
 ---
-## Data cleaning
+## Data cleaning and EDA
 EDAやモデルの学習をおこなうために、データクリーニングをします。  
-具体的には、以下の処理をしました。
-- target変数である`rent`が欠損している行は削除
-- すべてobject型になっているので、家賃など数値として扱うものは整数型に変更
+また、データの特性を知り、特徴量エンジニアリングやモデルの選定の際に活かします。
 
 
 ```python
@@ -356,8 +354,6 @@ df_all.drop('rent_all', axis=1, inplace=True)
 df_all['rent'] = df_all['rent'].apply(lambda x: float(x.rstrip('万円'))*10000).astype('int')
 ```
 
-## EDA and sample statistics
-データの特性を知り、特徴量エンジニアリングやモデルの選定の際に活かします。
 
 ### `rent`（家賃）の分布と統計量
 
